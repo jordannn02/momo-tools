@@ -54,6 +54,18 @@ scripts/install-local.sh
 
 The installer copies the public package into `~/.momo-tools` by default. It does not modify Codex, Claude, Cursor, browser profiles, credentials, shell startup files, or private indexes.
 
+## Visual Demo
+
+MoMo_tools also ships a static Evidence Dashboard that turns development-time fixture screenshots into a public-safe review layer:
+
+```bash
+python3 -m http.server 4173 --directory demo
+```
+
+Then open `http://127.0.0.1:4173`.
+
+The demo is intentionally static: no private connectors, no production data, no account screenshots, no writes, and no network calls.
+
 ## Use Your Own Workflow
 
 Start from the sample index:
@@ -157,6 +169,11 @@ docs/
   tests.md
   verification-levels.md
   workflows.md
+demo/
+  index.html
+  app.js
+  styles.css
+  assets/evidence/
 examples/
   personal-workflow.capabilities.yaml
   team-dev.capabilities.yaml

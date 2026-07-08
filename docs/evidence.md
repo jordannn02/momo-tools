@@ -26,5 +26,12 @@ Run:
 plugin/scripts/momo-tools evidence
 ```
 
-The public example evidence is synthetic. Do not publish private transcripts, customer data, local account names, hostnames, credentials, screenshots, or production evidence.
+Visual fixture screenshots are available in the static demo:
 
+```bash
+python3 -m http.server 4173 --directory demo
+```
+
+Then open `http://127.0.0.1:4173`.
+
+The public example evidence is synthetic. Do not publish private transcripts, customer data, local account names, hostnames, credentials, screenshots, or production evidence.

@@ -30,6 +30,9 @@ jobs:
           python -m json.tool plugin/capabilities.example.json >/dev/null
           python -m json.tool tests/fixtures/route-cases.json >/dev/null
           python -m json.tool tests/fixtures/routing-benchmark.json >/dev/null
+          test -f demo/index.html
+          test -f demo/app.js
+          test -f demo/styles.css
 
       - name: Validate public package
         run: |
