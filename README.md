@@ -2,6 +2,8 @@
 
 **Stop giving agents every tool. Give them a capability map, a risk model, and proof before trust.**
 
+![MoMo_tools workflow](assets/momo-tools-flow.png)
+
 MoMo_tools is a local-first capability router for AI coding agents. It helps you
 turn a messy collection of skills, plugins, MCP servers, scripts, apps, and
 connectors into a small, reviewable capability index.

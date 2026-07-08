@@ -1,0 +1,157 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">MoMo_tools workflow</title>
+  <desc id="desc">A flow diagram showing messy agent tools becoming a capability index, passing through risk gates, routing, verification levels, and safe tool use.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111417"/>
+      <stop offset="0.52" stop-color="#151B1D"/>
+      <stop offset="1" stop-color="#111316"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7CF8D2"/>
+      <stop offset="1" stop-color="#38D6A0"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#8EE8FF"/>
+      <stop offset="1" stop-color="#42A7C8"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFD98E"/>
+      <stop offset="1" stop-color="#F0A84C"/>
+    </linearGradient>
+    <linearGradient id="rose" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FF9AC2"/>
+      <stop offset="1" stop-color="#D86692"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.22 0 0 0 0 0.90 0 0 0 0 0.72 0 0 0 0.45 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .title { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 60px; font-weight: 700; fill: #F3F7F4; }
+      .subtitle { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 26px; font-weight: 400; fill: #AEBAB5; }
+      .step { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 28px; font-weight: 700; fill: #F5FAF7; }
+      .body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 20px; font-weight: 400; fill: #B8C5BF; }
+      .tiny { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 16px; font-weight: 600; fill: #DDE7E2; }
+      .mono { font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace; font-size: 18px; font-weight: 600; fill: #E7F4EE; }
+      .panel { fill: rgba(24, 31, 34, 0.92); stroke: rgba(211, 235, 225, 0.18); stroke-width: 1.2; }
+      .line { stroke: rgba(174, 201, 192, 0.38); stroke-width: 2; }
+      .arrow { stroke: #76E4C3; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10" stroke="#76E4C3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <path d="M-60 725C180 628 300 746 520 654C755 556 840 345 1080 322C1257 305 1405 368 1660 232" stroke="rgba(124,248,210,0.10)" stroke-width="100" stroke-linecap="round"/>
+  <path d="M-40 190C191 270 379 127 612 179C840 230 920 407 1177 443C1362 469 1470 401 1640 482" stroke="rgba(142,232,255,0.08)" stroke-width="80" stroke-linecap="round"/>
+
+  <text x="80" y="95" class="title">MoMo_tools</text>
+  <text x="82" y="137" class="subtitle">Turn tool sprawl into a capability map, risk gates, and proof before trust.</text>
+
+  <g transform="translate(80 220)">
+    <rect class="panel" width="250" height="210" rx="8"/>
+    <text x="26" y="48" class="step">Tool sprawl</text>
+    <text x="26" y="82" class="body">Skills, plugins, MCP,</text>
+    <text x="26" y="110" class="body">scripts, connectors.</text>
+    <g opacity="0.9">
+      <circle cx="52" cy="153" r="13" fill="url(#rose)"/>
+      <circle cx="93" cy="164" r="10" fill="url(#cyan)"/>
+      <circle cx="140" cy="145" r="12" fill="url(#amber)"/>
+      <circle cx="186" cy="165" r="9" fill="url(#mint)"/>
+      <circle cx="210" cy="133" r="7" fill="#6E7D78"/>
+      <path class="line" d="M52 153L93 164L140 145L186 165L210 133"/>
+      <path class="line" d="M93 164L186 165M140 145L210 133M52 153L140 145"/>
+    </g>
+  </g>
+
+  <path class="arrow" d="M350 325H445" marker-end="url(#arrowHead)"/>
+
+  <g transform="translate(470 210)">
+    <rect class="panel" width="270" height="230" rx="8"/>
+    <text x="26" y="50" class="step">Capability index</text>
+    <text x="26" y="84" class="body">Name, trigger, scope,</text>
+    <text x="26" y="112" class="body">risk, owner, caveats.</text>
+    <g transform="translate(26 142)">
+      <rect width="218" height="22" rx="5" fill="rgba(124,248,210,0.15)" stroke="rgba(124,248,210,0.42)"/>
+      <text x="12" y="16" class="mono">document-reader</text>
+      <rect y="34" width="185" height="22" rx="5" fill="rgba(142,232,255,0.14)" stroke="rgba(142,232,255,0.40)"/>
+      <text x="12" y="50" class="mono">repo-review</text>
+      <rect y="68" width="202" height="22" rx="5" fill="rgba(255,217,142,0.13)" stroke="rgba(255,217,142,0.38)"/>
+      <text x="12" y="84" class="mono">email-triage</text>
+    </g>
+  </g>
+
+  <path class="arrow" d="M760 325H855" marker-end="url(#arrowHead)"/>
+
+  <g transform="translate(880 210)">
+    <rect class="panel" width="270" height="230" rx="8"/>
+    <text x="26" y="50" class="step">Risk gates</text>
+    <text x="26" y="84" class="body">Write, private data,</text>
+    <text x="26" y="112" class="body">network, credentials.</text>
+    <g transform="translate(34 143)">
+      <path d="M72 0L136 26V78C136 118 104 146 72 160C40 146 8 118 8 78V26L72 0Z" fill="rgba(124,248,210,0.12)" stroke="#7CF8D2" stroke-width="2"/>
+      <path d="M45 78L65 99L103 54" stroke="#7CF8D2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#softGlow)"/>
+      <g transform="translate(160 8)">
+        <rect width="54" height="26" rx="6" fill="rgba(255,217,142,0.16)" stroke="rgba(255,217,142,0.50)"/>
+        <text x="14" y="18" class="tiny">write</text>
+        <rect y="42" width="66" height="26" rx="6" fill="rgba(255,154,194,0.14)" stroke="rgba(255,154,194,0.48)"/>
+        <text x="12" y="60" class="tiny">private</text>
+        <rect y="84" width="72" height="26" rx="6" fill="rgba(142,232,255,0.14)" stroke="rgba(142,232,255,0.48)"/>
+        <text x="12" y="102" class="tiny">network</text>
+      </g>
+    </g>
+  </g>
+
+  <path class="arrow" d="M1170 325H1265" marker-end="url(#arrowHead)"/>
+
+  <g transform="translate(1290 220)">
+    <rect class="panel" width="230" height="210" rx="8"/>
+    <text x="26" y="48" class="step">Safe route</text>
+    <text x="26" y="82" class="body">Smallest useful</text>
+    <text x="26" y="110" class="body">tool set wins.</text>
+    <g transform="translate(30 143)">
+      <circle cx="22" cy="22" r="18" fill="url(#mint)"/>
+      <circle cx="86" cy="22" r="18" fill="url(#cyan)"/>
+      <circle cx="150" cy="22" r="18" fill="url(#amber)"/>
+      <path d="M40 22H68M104 22H132" stroke="#CFE5DD" stroke-width="3" stroke-linecap="round"/>
+      <path d="M15 22L21 28L31 16" stroke="#101416" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M79 22L85 28L95 16" stroke="#101416" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M143 22L149 28L159 16" stroke="#101416" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <g transform="translate(260 570)">
+    <rect class="panel" width="1080" height="190" rx="8"/>
+    <text x="34" y="50" class="step">Verification levels keep trust honest</text>
+    <g transform="translate(42 88)">
+      <rect width="270" height="62" rx="8" fill="rgba(142,232,255,0.10)" stroke="rgba(142,232,255,0.42)"/>
+      <text x="22" y="27" class="mono">visible</text>
+      <text x="22" y="50" class="body">registered, not proven</text>
+    </g>
+    <path class="arrow" d="M340 120H435" marker-end="url(#arrowHead)"/>
+    <g transform="translate(460 88)">
+      <rect width="270" height="62" rx="8" fill="rgba(255,217,142,0.10)" stroke="rgba(255,217,142,0.42)"/>
+      <text x="22" y="27" class="mono">executed</text>
+      <text x="22" y="50" class="body">ran once with evidence</text>
+    </g>
+    <path class="arrow" d="M758 120H853" marker-end="url(#arrowHead)"/>
+    <g transform="translate(878 88)">
+      <rect width="270" height="62" rx="8" fill="rgba(124,248,210,0.11)" stroke="rgba(124,248,210,0.50)"/>
+      <text x="22" y="27" class="mono">verified-working</text>
+      <text x="22" y="50" class="body">repeatable proof</text>
+    </g>
+  </g>
+
+  <g transform="translate(80 794)">
+    <rect width="1440" height="48" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.09)"/>
+    <text x="28" y="31" class="tiny">Input: user task + local capability index</text>
+    <text x="480" y="31" class="tiny">Control: gates block risky shortcuts</text>
+    <text x="925" y="31" class="tiny">Output: safer, smaller, auditable tool use</text>
+  </g>
+</svg>
