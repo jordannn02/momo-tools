@@ -9,6 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INDEX = ROOT / "capabilities.example.json"
 DEFAULT_CASES = ROOT.parent / "tests" / "fixtures" / "route-cases.json"
+DEFAULT_BENCHMARK = ROOT.parent / "tests" / "fixtures" / "routing-benchmark.json"
+DEFAULT_EVIDENCE = ROOT.parent / "evidence" / "example-verification.jsonl"
+YAML_EXTENSIONS = {".yaml", ".yml"}
 
 REQUIRED_FIELDS = {
     "name",
@@ -28,13 +31,25 @@ REQUIRED_FIELDS = {
 }
 
 VERIFICATION_LEVELS = {"visible", "executed", "verified-working"}
+EVIDENCE_REQUIRED_FIELDS = {
+    "capability",
+    "level",
+    "status",
+    "checked_at",
+    "command",
+    "evidence_ref",
+    "risk_boundary",
+}
 
 RISK_HINTS = {
     "write": [
         "write",
         "save",
         "edit",
+        "fix",
         "modify",
+        "patch",
+        "update",
         "delete",
         "archive",
         "send",
@@ -107,16 +122,76 @@ NEGATIONS = {
     ],
 }
 
+ACTION_HINTS = {
+    "persist": ["save", "remember", "capture", "write note", "store"],
+    "send": ["send", "reply", "email", "message"],
+    "delete": ["delete", "archive", "remove", "trash"],
+    "external-call": ["latest", "current", "browse", "website", "web", "online"],
+    "private-read": ["email", "inbox", "customer", "client", "account", "private"],
+    "credential-use": ["api key", "secret", "token", "credential", "password"],
+}
+
+
+def parse_scalar(value: str):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def load_simple_yaml_index(path: Path):
+    capabilities = []
+    current = None
+    current_list_key = None
+    for line_no, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        stripped = raw.strip()
+        if indent == 0 and stripped.startswith("- "):
+            current = {}
+            capabilities.append(current)
+            current_list_key = None
+            item = stripped[2:].strip()
+            if item:
+                if ":" not in item:
+                    raise SystemExit(f"invalid YAML index {path}:{line_no}: expected key: value")
+                key, value = item.split(":", 1)
+                current[key.strip()] = parse_scalar(value)
+            continue
+        if current is None:
+            raise SystemExit(f"invalid YAML index {path}:{line_no}: expected top-level list item")
+        if stripped.startswith("- "):
+            if current_list_key is None:
+                raise SystemExit(f"invalid YAML index {path}:{line_no}: list item without key")
+            current[current_list_key].append(parse_scalar(stripped[2:]))
+            continue
+        if ":" not in stripped:
+            raise SystemExit(f"invalid YAML index {path}:{line_no}: expected key: value")
+        key, value = stripped.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if value:
+            current[key] = parse_scalar(value)
+            current_list_key = None
+        else:
+            current[key] = []
+            current_list_key = key
+    return capabilities
+
 
 def load_index(path: Path):
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        if path.suffix.lower() in YAML_EXTENSIONS:
+            data = load_simple_yaml_index(path)
+        else:
+            data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise SystemExit(f"index not found: {path}")
     except json.JSONDecodeError as exc:
         raise SystemExit(f"invalid JSON index {path}: {exc}")
     if not isinstance(data, list):
-        raise SystemExit("index must be a JSON array")
+        raise SystemExit("index must be an array/list of capabilities")
     return data
 
 
@@ -160,6 +235,15 @@ def infer_gates(prompt: str):
     return sorted(gates)
 
 
+def infer_actions(prompt: str):
+    prompt_l = prompt.lower()
+    actions = set()
+    for action, hints in ACTION_HINTS.items():
+        if any(hint in prompt_l for hint in hints):
+            actions.add(action)
+    return sorted(actions)
+
+
 def score_capability(cap, prompt: str):
     prompt_l = prompt.lower()
     prompt_words = set(normalize_words(prompt))
@@ -199,6 +283,7 @@ def score_capability(cap, prompt: str):
 
 def route(capabilities, prompt: str, limit: int):
     gates = infer_gates(prompt)
+    actions = infer_actions(prompt)
     prompt_l = prompt.lower()
     blocked_risks = {
         risk
@@ -226,7 +311,7 @@ def route(capabilities, prompt: str, limit: int):
             }
         )
     ranked.sort(key=lambda item: (bool(item["blocked_by_prompt"]), -item["score"], item["name"]))
-    return {"prompt": prompt, "gates": gates, "matches": ranked[:limit]}
+    return {"prompt": prompt, "gates": gates, "actions": actions, "matches": ranked[:limit]}
 
 
 def print_json(data):
@@ -320,6 +405,23 @@ def cmd_audit(args):
     return 0 if ok else 1
 
 
+def cmd_benchmark(args):
+    capabilities = load_index(args.index)
+    cases = load_cases(args.cases)
+    ok, results = evaluate_cases(capabilities, cases)
+    passed = sum(1 for result in results if result["passed"])
+    print_json(
+        {
+            "ok": ok,
+            "case_count": len(cases),
+            "passed": passed,
+            "pass_rate": round(passed / len(cases), 4) if cases else 0,
+            "results": results,
+        }
+    )
+    return 0 if ok else 1
+
+
 def cmd_pressure(args):
     capabilities = load_index(args.index)
     cases = [
@@ -350,6 +452,51 @@ def cmd_pressure(args):
     return 0 if ok else 1
 
 
+def load_evidence(path: Path):
+    records = []
+    errors = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        raise SystemExit(f"evidence not found: {path}")
+    for line_no, line in enumerate(lines, 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{path}:{line_no}: invalid JSONL record: {exc}")
+            continue
+        if not isinstance(record, dict):
+            errors.append(f"{path}:{line_no}: record must be an object")
+            continue
+        missing = sorted(EVIDENCE_REQUIRED_FIELDS - set(record))
+        if missing:
+            errors.append(f"{path}:{line_no}: missing fields {', '.join(missing)}")
+        if record.get("level") not in VERIFICATION_LEVELS:
+            errors.append(f"{path}:{line_no}: invalid level {record.get('level')!r}")
+        records.append(record)
+    return records, errors
+
+
+def cmd_evidence(args):
+    records, errors = load_evidence(args.evidence)
+    levels = Counter(record.get("level", "missing") for record in records)
+    statuses = Counter(record.get("status", "missing") for record in records)
+    capabilities = Counter(record.get("capability", "missing") for record in records)
+    print_json(
+        {
+            "ok": not errors,
+            "record_count": len(records),
+            "levels": dict(sorted(levels.items())),
+            "statuses": dict(sorted(statuses.items())),
+            "capabilities": dict(sorted(capabilities.items())),
+            "errors": errors,
+        }
+    )
+    return 0 if not errors else 1
+
+
 def cmd_test(args):
     capabilities = load_index(args.index)
     errors = validation_errors(capabilities)
@@ -358,6 +505,8 @@ def cmd_test(args):
         return 1
     cases = load_cases(args.cases)
     audit_ok, audit_results = evaluate_cases(capabilities, cases)
+    benchmark_cases = load_cases(args.benchmark_cases)
+    benchmark_ok, benchmark_results = evaluate_cases(capabilities, benchmark_cases)
     pressure_cases = [
         {
             "id": "no_save_overrides_memory",
@@ -368,12 +517,13 @@ def cmd_test(args):
         }
     ]
     pressure_ok, pressure_results = evaluate_cases(capabilities, pressure_cases)
-    ok = audit_ok and pressure_ok
+    ok = audit_ok and pressure_ok and benchmark_ok
     print_json(
         {
             "ok": ok,
             "validate": {"ok": True, "capability_count": len(capabilities)},
             "audit": {"ok": audit_ok, "results": audit_results},
+            "benchmark": {"ok": benchmark_ok, "results": benchmark_results},
             "pressure": {"ok": pressure_ok, "results": pressure_results},
         }
     )
@@ -382,7 +532,7 @@ def cmd_test(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(description="MoMo_tools public capability router")
-    parser.add_argument("--index", type=Path, default=DEFAULT_INDEX, help="Path to capabilities JSON index")
+    parser.add_argument("--index", type=Path, default=DEFAULT_INDEX, help="Path to capabilities JSON or simple YAML index")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("validate")
@@ -396,10 +546,17 @@ def build_parser():
     audit_parser = sub.add_parser("audit")
     audit_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
 
+    benchmark_parser = sub.add_parser("benchmark")
+    benchmark_parser.add_argument("--cases", type=Path, default=DEFAULT_BENCHMARK)
+
+    evidence_parser = sub.add_parser("evidence")
+    evidence_parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+
     sub.add_parser("pressure")
 
     test_parser = sub.add_parser("test")
     test_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
+    test_parser.add_argument("--benchmark-cases", type=Path, default=DEFAULT_BENCHMARK)
     return parser
 
 
@@ -412,6 +569,8 @@ def main(argv=None):
         "list": cmd_list,
         "route": cmd_route,
         "audit": cmd_audit,
+        "benchmark": cmd_benchmark,
+        "evidence": cmd_evidence,
         "pressure": cmd_pressure,
         "test": cmd_test,
     }

@@ -7,14 +7,15 @@ First public-ready MoMo_tools package.
 Includes:
 
 - local-first capability index schema;
-- sample JSON/YAML capability indexes;
-- `momo-tools` CLI with `validate`, `dashboard`, `list`, `route`, `audit`, `pressure`, and `test`;
+- sample JSON and simple YAML capability indexes;
+- `momo-tools` CLI commands: `validate`, `dashboard`, `list`, `route`, `audit`, `benchmark`, `evidence`, `pressure`, `test`;
 - risk gates for write, private data, external network, credentials, local apps, and local files;
+- action gates for persist, send, delete, external-call, private-read, and credential-use;
 - verification levels: `visible`, `executed`, `verified-working`;
-- route fixture tests and pressure tests;
+- route fixture tests, starter routing benchmark, pressure tests, and evidence JSONL validation;
 - local installer that copies the public package to `~/.momo-tools`;
-- GitHub Actions CI for validation, install smoke test, and private-context leak scan;
-- documentation for architecture, risk model, verification levels, workflows, and tests.
+- GitHub Actions CI validation, install smoke test, YAML check, evidence check, and private-context leak scan;
+- documentation for architecture, schemas, risk model, verification levels, evidence, workflows, tests, and second-brain integration.
 
 Not included:
 

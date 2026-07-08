@@ -1,58 +1,58 @@
 # MoMo_tools
 
-**Stop giving agents every tool. Give them a capability map, a risk model, and proof before trust.**
+[![CI](https://github.com/jordannn02/momo-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/jordannn02/momo-tools/actions/workflows/ci.yml)
+
+**A local-first capability router for AI coding agents.**
+
+MoMo_tools helps agents choose a smaller, safer capability set before they touch tools. It turns skills, plugins, MCP servers, scripts, apps, and connectors into a reviewable capability index with risk gates and verification evidence.
 
 ![MoMo_tools workflow](assets/momo-tools-flow.png)
 
-MoMo_tools is a local-first capability router for AI coding agents. It helps you
-turn a messy collection of skills, plugins, MCP servers, scripts, apps, and
-connectors into a small, reviewable capability index.
-
-It does not execute your private tools. It helps the agent decide what to use,
-which gates apply, and whether a capability is merely visible or actually
-verified.
-
 ## Why This Exists
 
-Modern agents can see too many tools at once. That creates three problems:
+Modern coding agents often see too many tools at once. That creates three failure modes:
 
-- the agent picks noisy or risky tools when a smaller one would do;
-- every installed skill/plugin competes for context;
-- "installed" gets mistaken for "safe and working".
+- noisy tool selection when a smaller local capability would work;
+- installed tools competing for context even when they are irrelevant;
+- "installed" being mistaken for "safe and verified".
 
 MoMo_tools adds a thin governance layer:
 
-- **Capability index**: what exists, where it lives, what it is for.
-- **Risk gates**: write access, private data, credentials, external network,
-  browser/local app state, automation.
-- **Verification levels**: `visible`, `executed`, `verified-working`.
-- **Routing checks**: pick the smallest sufficient capability set.
-- **Pressure tests**: catch prompts like "do not save" plus "remember this"
-  before the agent does the wrong thing.
+| Layer | What it answers |
+|---|---|
+| Capability index | What exists, where it lives, and what it is for. |
+| Risk gates | Whether the task crosses write, private data, credential, browser, or network boundaries. |
+| Action gates | Whether the prompt implies persist, send, delete, external-call, private-read, or credential-use actions. |
+| Verification levels | Whether the capability is merely visible, executed once, or verified-working. |
+| Routing checks | Which capability set is sufficient for the prompt. |
+| Pressure tests | Whether conflicts like "remember this" plus "do not save" stay safe. |
+
+MoMo_tools does not execute your private tools. It routes and audits metadata so the agent can ask for the right capability with the right boundary.
 
 ## Quickstart
 
-Run directly from the repo:
+Run from the repository:
 
 ```bash
-./plugin/scripts/momo-tools validate
-./plugin/scripts/momo-tools dashboard
-./plugin/scripts/momo-tools route --prompt "Read this PDF, summarize it, do not save anything"
-./plugin/scripts/momo-tools audit
-./plugin/scripts/momo-tools pressure
-./plugin/scripts/momo-tools test
+chmod +x plugin/scripts/momo-tools scripts/install-local.sh
+plugin/scripts/momo-tools validate
+plugin/scripts/momo-tools dashboard
+plugin/scripts/momo-tools route --prompt "Read this PDF, summarize it, do not save anything"
+plugin/scripts/momo-tools audit
+plugin/scripts/momo-tools benchmark
+plugin/scripts/momo-tools evidence
+plugin/scripts/momo-tools pressure
+plugin/scripts/momo-tools test
 ```
 
 Or install a local copy:
 
 ```bash
-./scripts/install-local.sh
+scripts/install-local.sh
 ~/.momo-tools/bin/momo-tools dashboard
 ```
 
-The installer only copies the public package into `~/.momo-tools` by default. It
-does not modify Codex, Claude, Cursor, browser profiles, credentials, or shell
-startup files.
+The installer copies the public package into `~/.momo-tools` by default. It does not modify Codex, Claude, Cursor, browser profiles, credentials, shell startup files, or private indexes.
 
 ## Use Your Own Workflow
 
@@ -62,7 +62,7 @@ Start from the sample index:
 cp plugin/capabilities.example.json capabilities.local.json
 ```
 
-Then replace the example capabilities with your own:
+Then replace the examples with your own capabilities:
 
 ```json
 {
@@ -71,7 +71,7 @@ Then replace the example capabilities with your own:
   "trigger": ["review code", "security audit", "regression risk"],
   "scope": "local repo",
   "path_or_tool": "skills/repo-review/SKILL.md",
-  "risk": ["read-only"],
+  "risk": ["read-only", "local-file"],
   "source": "local",
   "owner": "you",
   "version": "0.1.0",
@@ -83,12 +83,34 @@ Then replace the example capabilities with your own:
 }
 ```
 
-Use the local file with:
+Use the local index with:
 
 ```bash
-./plugin/scripts/momo-tools --index capabilities.local.json dashboard
-./plugin/scripts/momo-tools --index capabilities.local.json route --prompt "Review this repo for release risk"
+plugin/scripts/momo-tools --index capabilities.local.json dashboard
+plugin/scripts/momo-tools --index capabilities.local.json route --prompt "Review this repo for release risk"
 ```
+
+Simple YAML indexes are also supported:
+
+```bash
+plugin/scripts/momo-tools --index plugin/capabilities.example.yaml validate
+```
+
+See [docs/schemas.md](docs/schemas.md) for the JSON schema and YAML boundary.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `validate` | Checks required fields, duplicate names, list fields, and verification levels. |
+| `dashboard` | Summarizes verification levels, risk tags, and validation health. |
+| `list` | Prints capability names, types, levels, and risks. |
+| `route --prompt ...` | Scores capabilities for one prompt and returns gates, actions, and matches. |
+| `audit` | Runs the core routing fixture. |
+| `benchmark` | Runs the broader starter routing benchmark. |
+| `evidence` | Validates synthetic JSONL verification evidence. |
+| `pressure` | Runs conflict prompts such as no-save plus remember-this. |
+| `test` | Runs validation, audit, benchmark, and pressure checks together. |
 
 ## Verification Levels
 
@@ -96,23 +118,30 @@ Use the local file with:
 |---|---|
 | `visible` | Registered and discoverable. This does not prove login, runtime access, or success. |
 | `executed` | Ran once on a bounded task and produced inspectable evidence. |
-| `verified-working` | Has repeatable evidence and an explicit risk boundary. |
+| `verified-working` | Has repeatable evidence plus an explicit risk boundary. |
 
-Promotion should be earned, not assumed. A capability should not become
-`verified-working` just because it is installed.
+Promotion should be earned. A capability should not become `verified-working` just because it is installed.
 
-## What This Public Version Does Not Include
+See [docs/evidence.md](docs/evidence.md) for the JSONL evidence format.
 
-- No private capability index.
-- No real connector calls.
-- No browser profile access.
-- No email, Drive, Notion, database, or production writes.
-- No local secrets or environment-specific paths.
-- No automation that runs by itself.
+## Public Safety Boundary
+
+This public version includes only synthetic examples:
+
+- no private capability index;
+- no real connector calls;
+- no browser profile access;
+- no email, Drive, Notion, database, or production writes;
+- no local secrets or environment-specific paths;
+- no automatic memory capture or automation runs.
+
+If you fork this project, keep your private capability index out of the public repo.
 
 ## Project Shape
 
 ```text
+.github/workflows/ci.yml
+capabilities.schema.json
 plugin/
   .codex-plugin/plugin.json
   capabilities.example.json
@@ -121,23 +150,47 @@ plugin/
   skills/momo-tools/SKILL.md
 docs/
   architecture.md
+  evidence.md
   risk-model.md
+  routing-benchmark.md
+  schemas.md
+  tests.md
   verification-levels.md
   workflows.md
-  tests.md
 examples/
   personal-workflow.capabilities.yaml
   team-dev.capabilities.yaml
   docs-research.capabilities.yaml
-tests/
-  fixtures/route-cases.json
+tests/fixtures/
+  route-cases.json
+  routing-benchmark.json
+evidence/
+  example-verification.jsonl
 ```
 
-`docs/github-actions-ci.example.yml` contains an optional GitHub Actions
-workflow. Copy it to `.github/workflows/ci.yml` after authenticating with a
-GitHub token that has workflow scope.
+## Second Brain Loop
+
+MoMo_tools is the routing and safety layer. A second-brain system can be the long-term learning layer.
+
+```text
+user task
+  -> momo-tools route / gates / verification
+  -> bounded tool use by the agent
+  -> evidence record
+  -> optional second-brain capture after user-safe delivery
+  -> future routing preference
+```
+
+See [docs/second-brain-integration.md](docs/second-brain-integration.md) for a minimal integration sketch.
+
+## Roadmap
+
+- Grow the routing benchmark from the starter fixture to 50-100 synthetic cases.
+- Add optional JSON Schema validation in pre-commit examples.
+- Add richer action-level gates for send, persist, delete, external-call, private-read, and credential-use.
+- Add more evidence fixtures for `executed` and `verified-working` promotion.
+- Provide a private-index template that is safe to keep outside public Git.
 
 ## Design Principle
 
-MoMo_tools is not a bigger toolbox. It is a decision layer that makes tool use
-smaller, safer, and more auditable.
+MoMo_tools is not a bigger toolbox. It is a decision layer that makes tool use smaller, safer, and more auditable.

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jordannn02/momo-tools/capabilities.schema.json",
+  "title": "MoMo_tools capability index",
+  "description": "A list of local-first capability metadata records for routing, risk gates, and verification boundaries.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "name",
+      "type",
+      "trigger",
+      "scope",
+      "path_or_tool",
+      "risk",
+      "source",
+      "owner",
+      "version",
+      "last_verified",
+      "verification_level",
+      "known_caveats",
+      "canonical_for",
+      "workflow_shape"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1
+      },
+      "type": {
+        "type": "string",
+        "enum": ["plugin", "skill", "connector", "workflow", "script", "app", "mcp-server"]
+      },
+      "trigger": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minItems": 1
+      },
+      "scope": {
+        "type": "string",
+        "minLength": 1
+      },
+      "path_or_tool": {
+        "type": "string",
+        "minLength": 1
+      },
+      "risk": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "local-file",
+            "write",
+            "private-data",
+            "external-network",
+            "credential",
+            "local-app"
+          ]
+        },
+        "minItems": 1
+      },
+      "source": {
+        "type": "string",
+        "minLength": 1
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "last_verified": {
+        "type": "string",
+        "minLength": 1
+      },
+      "verification_level": {
+        "type": "string",
+        "enum": ["visible", "executed", "verified-working"]
+      },
+      "known_caveats": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "canonical_for": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minItems": 1
+      },
+      "workflow_shape": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "additionalProperties": true
+  }
+}
+

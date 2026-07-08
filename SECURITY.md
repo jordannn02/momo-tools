@@ -26,10 +26,9 @@ Run:
 
 ```bash
 ./plugin/scripts/momo-tools test
-rg -n "secret|token|api_key|password|/Users/|C:\\\\|internal|customer" .
+rg -n "secret|token|api_key|password|HOME_PATH|WINDOWS_PATH|internal|customer" .
 ```
 
 Review every match manually. Some words such as `secret` can appear in security
 documentation; the goal is to prevent real secrets and private environment
 details from leaking.
-

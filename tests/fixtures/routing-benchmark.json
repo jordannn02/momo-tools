@@ -1,0 +1,87 @@
+[
+  {
+    "id": "pdf_summary_read_only",
+    "prompt": "Read the attached PDF, extract the key points, and keep this read-only.",
+    "expected": ["document-reader"],
+    "forbidden": ["memory-capture"],
+    "must_gate": ["local-file", "write"]
+  },
+  {
+    "id": "docx_table_extract",
+    "prompt": "Extract tables from this DOCX and summarize them without editing files.",
+    "expected": ["document-reader"],
+    "forbidden": [],
+    "must_gate": ["local-file", "write"]
+  },
+  {
+    "id": "official_latest_release",
+    "prompt": "Find the current official release note online and cite the source.",
+    "expected": ["browser-research"],
+    "forbidden": [],
+    "must_gate": ["external-network"]
+  },
+  {
+    "id": "offline_latest_conflict",
+    "prompt": "Tell me the latest changelog, but no web and offline only.",
+    "expected": ["browser-research"],
+    "forbidden": [],
+    "must_gate": ["external-network"]
+  },
+  {
+    "id": "repo_release_blockers",
+    "prompt": "Review this repository for release-blocking bugs, regression risk, and missing tests.",
+    "expected": ["repo-review"],
+    "forbidden": [],
+    "must_gate": ["local-file"]
+  },
+  {
+    "id": "security_audit",
+    "prompt": "Do a security audit of this local repo and list high risk findings first.",
+    "expected": ["repo-review"],
+    "forbidden": [],
+    "must_gate": ["local-file"]
+  },
+  {
+    "id": "email_draft_guarded",
+    "prompt": "Search my inbox for the client thread and draft a reply, but do not send it.",
+    "expected": ["email-triage"],
+    "forbidden": [],
+    "must_gate": ["private-data", "external-network", "write"]
+  },
+  {
+    "id": "remember_allowed",
+    "prompt": "Remember this project decision and save it to the local knowledge base.",
+    "expected": ["memory-capture"],
+    "forbidden": [],
+    "must_gate": ["write", "private-data"]
+  },
+  {
+    "id": "remember_blocked_by_no_save",
+    "prompt": "Remember the key points from this file, but do not save or write anything.",
+    "expected": ["document-reader"],
+    "forbidden": ["memory-capture"],
+    "must_gate": ["local-file", "write"]
+  },
+  {
+    "id": "frontend_visual_qa",
+    "prompt": "Run a local frontend preview, take screenshots, and fix the responsive layout.",
+    "expected": ["frontend-qa"],
+    "forbidden": [],
+    "must_gate": ["local-app", "write"]
+  },
+  {
+    "id": "csv_dashboard",
+    "prompt": "Analyze this CSV, build a KPI dashboard, and write the chart artifact.",
+    "expected": ["data-analysis"],
+    "forbidden": [],
+    "must_gate": ["local-file", "write"]
+  },
+  {
+    "id": "capability_dashboard",
+    "prompt": "Show a dashboard of available capability router entries and verification levels.",
+    "expected": ["momo-tools"],
+    "forbidden": [],
+    "must_gate": []
+  }
+]
+
