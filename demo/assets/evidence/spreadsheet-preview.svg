@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520">
+  <rect width="900" height="520" fill="#f7f8f6"/>
+  <style>
+    text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  </style>
+  <rect x="36" y="36" width="828" height="448" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+  <text x="72" y="92" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="850" fill="#0f766e" text-anchor="start"><tspan x="72" dy="0">SYNTHETIC EVIDENCE FIXTURE</tspan></text>
+  <text x="72" y="158" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="850" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Spreadsheet previews keep</tspan><tspan x="72" dy="56">table shape.</tspan></text>
+  <text x="72" y="290" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="19" font-weight="500" fill="#63706b" text-anchor="start"><tspan x="72" dy="0">Small spreadsheet artifacts should remain readable before analysis</tspan><tspan x="72" dy="30">claims are made.</tspan></text>
+  
+      <rect x="88" y="260" width="720" height="180" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+      <rect x="88" y="260" width="720" height="44" rx="8" fill="#e4ecfb" stroke="#d9e1dd" stroke-width="1"/>
+      <text x="130" y="292" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="850" fill="#111816" text-anchor="start"><tspan x="130" dy="0">A</tspan><tspan x="130" dy="42">1</tspan><tspan x="130" dy="42">2</tspan><tspan x="130" dy="42">3</tspan></text>
+      <text x="210" y="292" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="750" fill="#111816" text-anchor="start"><tspan x="210" dy="0">Metric</tspan><tspan x="210" dy="42">Total Revenue</tspan><tspan x="210" dy="42">Total Cost</tspan><tspan x="210" dy="42">Gross Margin</tspan></text>
+      <text x="600" y="292" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="750" fill="#63706b" text-anchor="start"><tspan x="600" dy="0">Preview only</tspan></text>
+      <rect x="88" y="204" width="126" height="28" rx="14" fill="#dff3ef" stroke="transparent" stroke-width="1"/>
+  <text x="151" y="223" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#075e56" text-anchor="middle"><tspan x="151" dy="0">bounded table</tspan></text>
+    
+  </svg>

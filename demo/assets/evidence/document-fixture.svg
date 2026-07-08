@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="860" viewBox="0 0 1200 860">
+  <rect width="1200" height="860" fill="#f7f8f6"/>
+  <style>
+    text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  </style>
+  <rect x="36" y="36" width="1128" height="788" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+  <text x="72" y="92" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="850" fill="#0f766e" text-anchor="start"><tspan x="72" dy="0">SYNTHETIC EVIDENCE FIXTURE</tspan></text>
+  <text x="72" y="158" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="850" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Document pages become</tspan><tspan x="72" dy="56">bounded evidence.</tspan></text>
+  <text x="72" y="290" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="19" font-weight="500" fill="#63706b" text-anchor="start"><tspan x="72" dy="0">A document route should preserve source page context before</tspan><tspan x="72" dy="30">summarizing.</tspan></text>
+  
+      <rect x="92" y="330" width="760" height="420" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+      <text x="132" y="390" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" font-weight="850" fill="#111816" text-anchor="start"><tspan x="132" dy="0">MoMo Tools Document Fixture</tspan></text>
+      <text x="132" y="462" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="850" fill="#0f766e" text-anchor="start"><tspan x="132" dy="0">Verified Summary</tspan></text>
+      <text x="132" y="498" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="600" fill="#63706b" text-anchor="start"><tspan x="132" dy="0">This synthetic page demonstrates document capability output with</tspan><tspan x="132" dy="26">exact anchors and a visible caveat boundary.</tspan></text>
+      <text x="132" y="590" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="850" fill="#111816" text-anchor="start"><tspan x="132" dy="0">Evidence Matrix</tspan></text>
+      <rect x="132" y="622" width="620" height="56" rx="8" fill="#f0f4f2" stroke="#d9e1dd" stroke-width="1"/>
+      <text x="160" y="656" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="850" fill="#111816" text-anchor="start"><tspan x="160" dy="0">Anchor</tspan><tspan x="160" dy="0">Source</tspan><tspan x="160" dy="0">Status</tspan></text>
+      <text x="160" y="708" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="650" fill="#111816" text-anchor="start"><tspan x="160" dy="0">document-id</tspan><tspan x="160" dy="0">local fixture page</tspan><tspan x="160" dy="0">pass</tspan></text>
+      <rect x="890" y="360" width="100" height="28" rx="14" fill="#dff3ef" stroke="transparent" stroke-width="1"/>
+  <text x="940" y="379" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#075e56" text-anchor="middle"><tspan x="940" dy="0">local file</tspan></text>
+    
+  </svg>

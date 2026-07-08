@@ -442,7 +442,7 @@ h3 {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 10;
-  object-fit: cover;
+  object-fit: contain;
   object-position: top left;
   border: 0;
   border-bottom: 1px solid var(--line);

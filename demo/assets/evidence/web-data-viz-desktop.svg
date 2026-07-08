@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#f7f8f6"/>
+  <style>
+    text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  </style>
+  <rect x="36" y="36" width="1128" height="688" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+  <text x="72" y="92" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="850" fill="#0f766e" text-anchor="start"><tspan x="72" dy="0">SYNTHETIC EVIDENCE FIXTURE</tspan></text>
+  <text x="72" y="158" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="850" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Invoices dominate the</tspan><tspan x="72" dy="56">sample queue.</tspan></text>
+  <text x="72" y="290" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="19" font-weight="500" fill="#63706b" text-anchor="start"><tspan x="72" dy="0">Direct labels and static chart output prove data visualization</tspan><tspan x="72" dy="30">without production data.</tspan></text>
+  
+        <text x="72" y="378" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Invoices</tspan></text>
+            <rect x="240" y="360" width="540" height="14" rx="7" fill="#e8f0ed" stroke="transparent" stroke-width="1"/>
+  <rect x="240" y="360" width="518" height="14" rx="7" fill="#0f766e" stroke="transparent" stroke-width="1"/>
+            <text x="808" y="378" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="850" fill="#111816" text-anchor="start"><tspan x="808" dy="0">34</tspan></text><text x="72" y="448" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Expenses</tspan></text>
+            <rect x="240" y="430" width="540" height="14" rx="7" fill="#e8f0ed" stroke="transparent" stroke-width="1"/>
+  <rect x="240" y="430" width="335" height="14" rx="7" fill="#0f766e" stroke="transparent" stroke-width="1"/>
+            <text x="808" y="448" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="850" fill="#111816" text-anchor="start"><tspan x="808" dy="0">18</tspan></text><text x="72" y="518" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Vendors</tspan></text>
+            <rect x="240" y="500" width="540" height="14" rx="7" fill="#e8f0ed" stroke="transparent" stroke-width="1"/>
+  <rect x="240" y="500" width="227" height="14" rx="7" fill="#0f766e" stroke="transparent" stroke-width="1"/>
+            <text x="808" y="518" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="850" fill="#111816" text-anchor="start"><tspan x="808" dy="0">11</tspan></text><text x="72" y="588" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Access</tspan></text>
+            <rect x="240" y="570" width="540" height="14" rx="7" fill="#e8f0ed" stroke="transparent" stroke-width="1"/>
+  <rect x="240" y="570" width="167" height="14" rx="7" fill="#0f766e" stroke="transparent" stroke-width="1"/>
+            <text x="808" y="588" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="850" fill="#111816" text-anchor="start"><tspan x="808" dy="0">8</tspan></text>
+        <rect x="850" y="330" width="250" height="250" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+        <text x="880" y="380" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="850" fill="#111816" text-anchor="start"><tspan x="880" dy="0">Reading path</tspan></text>
+        <text x="880" y="430" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="600" fill="#63706b" text-anchor="start"><tspan x="880" dy="0">Rank queue load, keep</tspan><tspan x="880" dy="24">source caveats visible,</tspan><tspan x="880" dy="24">and avoid hover-only</tspan><tspan x="880" dy="24">meaning.</tspan></text>
+      
+  </svg>

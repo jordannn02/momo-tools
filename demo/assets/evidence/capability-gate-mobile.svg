@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="900" viewBox="0 0 420 900">
+  <rect width="420" height="900" fill="#f7f8f6"/>
+  <style>
+    text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  </style>
+  <rect x="36" y="36" width="348" height="828" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+  <text x="72" y="92" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="850" fill="#0f766e" text-anchor="start"><tspan x="72" dy="0">SYNTHETIC EVIDENCE FIXTURE</tspan></text>
+  <text x="72" y="158" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="850" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Gate review on a narrow</tspan><tspan x="72" dy="56">screen.</tspan></text>
+  <text x="72" y="290" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="19" font-weight="500" fill="#63706b" text-anchor="start"><tspan x="72" dy="0">The same proof model must remain readable in mobile review contexts.</tspan></text>
+  
+      <rect x="48" y="330" width="324" height="96" rx="8" fill="#0d1513" stroke="#0d1513" stroke-width="1"/>
+      <text x="72" y="366" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#ffffff" text-anchor="start"><tspan x="72" dy="0">Verified</tspan></text>
+      <text x="72" y="406" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="34" font-weight="850" fill="#ffffff" text-anchor="start"><tspan x="72" dy="0">18</tspan></text>
+      <rect x="48" y="446" width="324" height="96" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+      <text x="72" y="482" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="800" fill="#111816" text-anchor="start"><tspan x="72" dy="0">Visible</tspan></text>
+      <text x="72" y="522" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="34" font-weight="850" fill="#111816" text-anchor="start"><tspan x="72" dy="0">25</tspan></text>
+      <rect x="48" y="562" width="324" height="74" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+      <text x="72" y="606" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#111816" text-anchor="start"><tspan x="72" dy="0">frontend-app-builder</tspan></text>
+      <rect x="232" y="584" width="82" height="28" rx="14" fill="#fff1c9" stroke="transparent" stroke-width="1"/>
+  <text x="273" y="603" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#7a4b00" text-anchor="middle"><tspan x="273" dy="0">gated</tspan></text>
+      <rect x="48" y="656" width="324" height="74" rx="8" fill="#ffffff" stroke="#d9e1dd" stroke-width="1"/>
+      <text x="72" y="700" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="800" fill="#111816" text-anchor="start"><tspan x="72" dy="0">codex-crew</tspan></text>
+      <rect x="232" y="678" width="82" height="28" rx="14" fill="#dff3ef" stroke="transparent" stroke-width="1"/>
+  <text x="273" y="697" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="800" fill="#075e56" text-anchor="middle"><tspan x="273" dy="0">safe</tspan></text>
+      <text x="48" y="792" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="850" fill="#111816" text-anchor="start"><tspan x="48" dy="0">No hidden promotion.</tspan></text>
+      <text x="48" y="826" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500" fill="#63706b" text-anchor="start"><tspan x="48" dy="0">Evidence remains visible before</tspan><tspan x="48" dy="22">any capability becomes trusted.</tspan></text>
+    
+  </svg>

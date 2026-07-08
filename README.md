@@ -6,7 +6,7 @@
 
 MoMo_tools helps agents choose a smaller, safer capability set before they touch tools. It turns skills, plugins, MCP servers, scripts, apps, and connectors into a reviewable capability index with risk gates and verification evidence.
 
-![MoMo_tools workflow](assets/momo-tools-flow.png)
+![MoMo_tools workflow](assets/momo-tools-flow.svg)
 
 ## Why This Exists
 
