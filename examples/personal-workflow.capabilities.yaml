@@ -1,0 +1,22 @@
+- name: personal-notes
+  type: workflow
+  trigger:
+    - remember this
+    - save note
+    - capture decision
+  scope: local notes
+  path_or_tool: local note workflow
+  risk:
+    - write
+    - private-data
+  source: user-defined
+  owner: you
+  version: 0.1.0
+  last_verified: not-verified
+  verification_level: visible
+  known_caveats:
+    - Do not run when the user says not to save.
+  canonical_for:
+    - personal knowledge capture
+  workflow_shape: summarize -> redact -> append
+

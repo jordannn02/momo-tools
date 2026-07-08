@@ -1,0 +1,422 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_INDEX = ROOT / "capabilities.example.json"
+DEFAULT_CASES = ROOT.parent / "tests" / "fixtures" / "route-cases.json"
+
+REQUIRED_FIELDS = {
+    "name",
+    "type",
+    "trigger",
+    "scope",
+    "path_or_tool",
+    "risk",
+    "source",
+    "owner",
+    "version",
+    "last_verified",
+    "verification_level",
+    "known_caveats",
+    "canonical_for",
+    "workflow_shape",
+}
+
+VERIFICATION_LEVELS = {"visible", "executed", "verified-working"}
+
+RISK_HINTS = {
+    "write": [
+        "write",
+        "save",
+        "edit",
+        "modify",
+        "delete",
+        "archive",
+        "send",
+        "draft",
+        "reply",
+        "remember",
+        "capture",
+    ],
+    "external-network": [
+        "latest",
+        "current",
+        "today",
+        "website",
+        "browse",
+        "web",
+        "online",
+        "email",
+        "inbox",
+    ],
+    "private-data": [
+        "email",
+        "inbox",
+        "customer",
+        "client",
+        "private",
+        "account",
+        "knowledge base",
+    ],
+    "credential": [
+        "api key",
+        "secret",
+        "token",
+        "credential",
+        "password",
+    ],
+    "local-app": [
+        "browser",
+        "screenshot",
+        "ui",
+        "frontend",
+        "local app",
+    ],
+    "local-file": [
+        "file",
+        "repo",
+        "repository",
+        "pdf",
+        "docx",
+        "csv",
+        "spreadsheet",
+    ],
+}
+
+NEGATIONS = {
+    "write": [
+        "do not save",
+        "don't save",
+        "no save",
+        "do not write",
+        "don't write",
+        "no write",
+        "read only",
+        "read-only",
+    ],
+    "external-network": [
+        "do not browse",
+        "don't browse",
+        "no web",
+        "offline only",
+    ],
+}
+
+
+def load_index(path: Path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"index not found: {path}")
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid JSON index {path}: {exc}")
+    if not isinstance(data, list):
+        raise SystemExit("index must be a JSON array")
+    return data
+
+
+def normalize_words(text: str):
+    return re.findall(r"[a-z0-9][a-z0-9_-]*", text.lower())
+
+
+def contains_phrase(text: str, phrase: str):
+    return phrase.lower() in text.lower()
+
+
+def validation_errors(capabilities):
+    errors = []
+    names = Counter()
+    for idx, cap in enumerate(capabilities):
+        name = cap.get("name", f"<row {idx}>")
+        names[name] += 1
+        missing = sorted(REQUIRED_FIELDS - set(cap))
+        if missing:
+            errors.append(f"{name}: missing fields {', '.join(missing)}")
+        if cap.get("verification_level") not in VERIFICATION_LEVELS:
+            errors.append(f"{name}: invalid verification_level {cap.get('verification_level')!r}")
+        for field in ("trigger", "risk", "known_caveats", "canonical_for"):
+            if field in cap and not isinstance(cap[field], list):
+                errors.append(f"{name}: {field} must be a list")
+    for name, count in names.items():
+        if count > 1:
+            errors.append(f"{name}: duplicate capability name ({count})")
+    return errors
+
+
+def infer_gates(prompt: str):
+    prompt_l = prompt.lower()
+    gates = set()
+    for risk, hints in RISK_HINTS.items():
+        if any(hint in prompt_l for hint in hints):
+            gates.add(risk)
+    for risk, negations in NEGATIONS.items():
+        if any(neg in prompt_l for neg in negations):
+            gates.add(risk)
+    return sorted(gates)
+
+
+def score_capability(cap, prompt: str):
+    prompt_l = prompt.lower()
+    prompt_words = set(normalize_words(prompt))
+    score = 0
+    reasons = []
+
+    for phrase in cap.get("trigger", []):
+        phrase_l = str(phrase).lower()
+        if phrase_l in prompt_l:
+            score += 5
+            reasons.append(f"trigger:{phrase}")
+        else:
+            phrase_words = set(normalize_words(phrase_l))
+            overlap = prompt_words & phrase_words
+            if overlap:
+                score += len(overlap)
+                reasons.append(f"keyword:{'/'.join(sorted(overlap))}")
+
+    for label in cap.get("canonical_for", []):
+        label_words = set(normalize_words(str(label)))
+        overlap = prompt_words & label_words
+        if overlap:
+            score += 2 * len(overlap)
+            reasons.append(f"canonical:{'/'.join(sorted(overlap))}")
+
+    name_words = set(normalize_words(cap.get("name", "")))
+    overlap = prompt_words & name_words
+    if overlap:
+        score += 2 * len(overlap)
+        reasons.append(f"name:{'/'.join(sorted(overlap))}")
+
+    if score > 0 and cap.get("verification_level") == "verified-working":
+        score += 1
+
+    return score, reasons
+
+
+def route(capabilities, prompt: str, limit: int):
+    gates = infer_gates(prompt)
+    prompt_l = prompt.lower()
+    blocked_risks = {
+        risk
+        for risk, negations in NEGATIONS.items()
+        if any(neg in prompt_l for neg in negations)
+    }
+
+    ranked = []
+    for cap in capabilities:
+        score, reasons = score_capability(cap, prompt)
+        if score <= 0:
+            continue
+        risk_set = set(cap.get("risk", []))
+        blocked = sorted(risk_set & blocked_risks)
+        ranked.append(
+            {
+                "name": cap["name"],
+                "score": score,
+                "verification_level": cap.get("verification_level"),
+                "risk": cap.get("risk", []),
+                "blocked_by_prompt": blocked,
+                "reasons": reasons[:5],
+                "path_or_tool": cap.get("path_or_tool"),
+                "workflow_shape": cap.get("workflow_shape"),
+            }
+        )
+    ranked.sort(key=lambda item: (bool(item["blocked_by_prompt"]), -item["score"], item["name"]))
+    return {"prompt": prompt, "gates": gates, "matches": ranked[:limit]}
+
+
+def print_json(data):
+    print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def cmd_validate(args):
+    capabilities = load_index(args.index)
+    errors = validation_errors(capabilities)
+    if errors:
+        print_json({"ok": False, "errors": errors})
+        return 1
+    print_json({"ok": True, "capability_count": len(capabilities)})
+    return 0
+
+
+def cmd_dashboard(args):
+    capabilities = load_index(args.index)
+    errors = validation_errors(capabilities)
+    levels = Counter(cap.get("verification_level", "missing") for cap in capabilities)
+    risks = Counter(risk for cap in capabilities for risk in cap.get("risk", []))
+    print_json(
+        {
+            "read_only": True,
+            "capability_count": len(capabilities),
+            "verification_levels": dict(sorted(levels.items())),
+            "risks": dict(sorted(risks.items())),
+            "validation_errors": len(errors),
+            "errors": errors,
+        }
+    )
+    return 1 if errors else 0
+
+
+def cmd_list(args):
+    capabilities = load_index(args.index)
+    for cap in capabilities:
+        risks = ",".join(cap.get("risk", []))
+        print(f"{cap['name']}\t{cap['type']}\t{cap['verification_level']}\t{risks}")
+    return 0
+
+
+def cmd_route(args):
+    capabilities = load_index(args.index)
+    result = route(capabilities, args.prompt, args.limit)
+    print_json(result)
+    return 0
+
+
+def load_cases(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"cases not found: {path}")
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid route cases {path}: {exc}")
+
+
+def evaluate_cases(capabilities, cases):
+    results = []
+    ok = True
+    for case in cases:
+        result = route(capabilities, case["prompt"], 8)
+        names = [match["name"] for match in result["matches"] if not match["blocked_by_prompt"]]
+        all_names = [match["name"] for match in result["matches"]]
+        gates = set(result["gates"])
+        expected_missing = [name for name in case.get("expected", []) if name not in all_names]
+        forbidden_present = [name for name in case.get("forbidden", []) if name in names]
+        gates_missing = [gate for gate in case.get("must_gate", []) if gate not in gates]
+        passed = not expected_missing and not forbidden_present and not gates_missing
+        ok = ok and passed
+        results.append(
+            {
+                "id": case["id"],
+                "passed": passed,
+                "expected_missing": expected_missing,
+                "forbidden_present": forbidden_present,
+                "gates_missing": gates_missing,
+                "top_matches": all_names[:5],
+                "gates": sorted(gates),
+            }
+        )
+    return ok, results
+
+
+def cmd_audit(args):
+    capabilities = load_index(args.index)
+    cases = load_cases(args.cases)
+    ok, results = evaluate_cases(capabilities, cases)
+    print_json({"ok": ok, "case_count": len(cases), "results": results})
+    return 0 if ok else 1
+
+
+def cmd_pressure(args):
+    capabilities = load_index(args.index)
+    cases = [
+        {
+            "id": "no_save_overrides_memory",
+            "prompt": "Summarize the document and remember the conclusions, but do not save or write anything.",
+            "expected": ["document-reader"],
+            "forbidden": ["memory-capture"],
+            "must_gate": ["write"],
+        },
+        {
+            "id": "no_web_blocks_latest",
+            "prompt": "Give me the latest official release notes, but do not browse the web.",
+            "expected": ["browser-research"],
+            "forbidden": [],
+            "must_gate": ["external-network"],
+        },
+        {
+            "id": "private_email_requires_gates",
+            "prompt": "Search my inbox for a client thread and prepare a reply.",
+            "expected": ["email-triage"],
+            "forbidden": [],
+            "must_gate": ["private-data", "external-network", "write"],
+        },
+    ]
+    ok, results = evaluate_cases(capabilities, cases)
+    print_json({"ok": ok, "case_count": len(cases), "results": results})
+    return 0 if ok else 1
+
+
+def cmd_test(args):
+    capabilities = load_index(args.index)
+    errors = validation_errors(capabilities)
+    if errors:
+        print_json({"ok": False, "stage": "validate", "errors": errors})
+        return 1
+    cases = load_cases(args.cases)
+    audit_ok, audit_results = evaluate_cases(capabilities, cases)
+    pressure_cases = [
+        {
+            "id": "no_save_overrides_memory",
+            "prompt": "Summarize the document and remember the conclusions, but do not save or write anything.",
+            "expected": ["document-reader"],
+            "forbidden": ["memory-capture"],
+            "must_gate": ["write"],
+        }
+    ]
+    pressure_ok, pressure_results = evaluate_cases(capabilities, pressure_cases)
+    ok = audit_ok and pressure_ok
+    print_json(
+        {
+            "ok": ok,
+            "validate": {"ok": True, "capability_count": len(capabilities)},
+            "audit": {"ok": audit_ok, "results": audit_results},
+            "pressure": {"ok": pressure_ok, "results": pressure_results},
+        }
+    )
+    return 0 if ok else 1
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="MoMo_tools public capability router")
+    parser.add_argument("--index", type=Path, default=DEFAULT_INDEX, help="Path to capabilities JSON index")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("validate")
+    sub.add_parser("dashboard")
+    sub.add_parser("list")
+
+    route_parser = sub.add_parser("route")
+    route_parser.add_argument("--prompt", required=True)
+    route_parser.add_argument("--limit", type=int, default=5)
+
+    audit_parser = sub.add_parser("audit")
+    audit_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
+
+    sub.add_parser("pressure")
+
+    test_parser = sub.add_parser("test")
+    test_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
+    return parser
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    commands = {
+        "validate": cmd_validate,
+        "dashboard": cmd_dashboard,
+        "list": cmd_list,
+        "route": cmd_route,
+        "audit": cmd_audit,
+        "pressure": cmd_pressure,
+        "test": cmd_test,
+    }
+    return commands[args.command](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

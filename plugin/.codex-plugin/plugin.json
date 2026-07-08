@@ -1,0 +1,28 @@
+{
+  "name": "momo-tools",
+  "version": "0.1.0-public",
+  "description": "Local-first capability router and safety gate for AI agent tools.",
+  "author": {
+    "name": "MoMo_tools contributors"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "MoMo_tools",
+    "shortDescription": "Route agent tasks to the smallest safe capability set.",
+    "longDescription": "MoMo_tools keeps a local capability index, risk gates, verification levels, routing checks, and pressure tests so agents do not confuse installed tools with safe, verified tools.",
+    "developerName": "MoMo_tools contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Capability routing",
+      "Local tool index",
+      "Risk gates",
+      "Verification levels",
+      "Read-only validation",
+      "Dashboard",
+      "Audit cases",
+      "Pressure tests"
+    ],
+    "defaultPrompt": "Use MoMo_tools to inspect the capability index and route this task safely."
+  }
+}
+

@@ -1,0 +1,21 @@
+- name: official-docs-research
+  type: workflow
+  trigger:
+    - latest docs
+    - official documentation
+    - current API
+  scope: external web
+  path_or_tool: web search and browser
+  risk:
+    - external-network
+  source: user-defined
+  owner: you
+  version: 0.1.0
+  last_verified: not-verified
+  verification_level: visible
+  known_caveats:
+    - Prefer primary sources and cite links.
+  canonical_for:
+    - current documentation lookup
+  workflow_shape: search -> open primary docs -> cite
+

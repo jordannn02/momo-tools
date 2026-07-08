@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  public-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Make scripts executable
+        run: chmod +x plugin/scripts/momo-tools scripts/install-local.sh
+      - name: Validate public package
+        run: |
+          plugin/scripts/momo-tools validate
+          plugin/scripts/momo-tools dashboard
+          plugin/scripts/momo-tools audit
+          plugin/scripts/momo-tools pressure
+          plugin/scripts/momo-tools test
+      - name: Install smoke test
+        run: |
+          MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
+          /tmp/momo-tools-public-install-test/bin/momo-tools test
+      - name: Private-context leak scan
+        run: |
+          ! grep -RInE --exclude='github-actions-ci.example.yml' 'PRIVATE_COMPANY|PRIVATE_CUSTOMER|PRIVATE_HOST|PRIVATE_DATABASE|PRIVATE_SECRET_LABEL' .

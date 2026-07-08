@@ -1,0 +1,23 @@
+- name: repo-review
+  type: skill
+  trigger:
+    - pull request
+    - review code
+    - release risk
+  scope: local repository
+  path_or_tool: skills/repo-review/SKILL.md
+  risk:
+    - read-only
+    - local-file
+  source: team-defined
+  owner: platform team
+  version: 0.1.0
+  last_verified: not-verified
+  verification_level: visible
+  known_caveats:
+    - Review is not a substitute for CI.
+  canonical_for:
+    - code review
+    - regression audit
+  workflow_shape: inspect diff -> findings -> test gaps
+

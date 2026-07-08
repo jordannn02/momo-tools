@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.momo-tools/
+private/
+local/
+*.log
+*.tmp
+*.bak
+capabilities.local.json
+capabilities.local.yaml
+
