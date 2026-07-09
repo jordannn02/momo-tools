@@ -37,6 +37,7 @@
       .step { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 28px; font-weight: 700; fill: #F5FAF7; }
       .body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 20px; font-weight: 400; fill: #B8C5BF; }
       .tiny { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 16px; font-weight: 600; fill: #DDE7E2; }
+      .badgeText { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; font-weight: 700; fill: #DDE7E2; }
       .mono { font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace; font-size: 18px; font-weight: 600; fill: #E7F4EE; }
       .panel { fill: rgba(24, 31, 34, 0.92); stroke: rgba(211, 235, 225, 0.18); stroke-width: 1.2; }
       .line { stroke: rgba(174, 201, 192, 0.38); stroke-width: 2; }
@@ -94,16 +95,18 @@
     <text x="26" y="50" class="step">Risk gates</text>
     <text x="26" y="84" class="body">Write, private data,</text>
     <text x="26" y="112" class="body">network, credentials.</text>
-    <g transform="translate(34 143)">
-      <path d="M72 0L136 26V78C136 118 104 146 72 160C40 146 8 118 8 78V26L72 0Z" fill="rgba(124,248,210,0.12)" stroke="#7CF8D2" stroke-width="2"/>
-      <path d="M45 78L65 99L103 54" stroke="#7CF8D2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#softGlow)"/>
-      <g transform="translate(160 8)">
-        <rect width="54" height="26" rx="6" fill="rgba(255,217,142,0.16)" stroke="rgba(255,217,142,0.50)"/>
-        <text x="14" y="18" class="tiny">write</text>
-        <rect y="42" width="66" height="26" rx="6" fill="rgba(255,154,194,0.14)" stroke="rgba(255,154,194,0.48)"/>
-        <text x="12" y="60" class="tiny">private</text>
-        <rect y="84" width="72" height="26" rx="6" fill="rgba(142,232,255,0.14)" stroke="rgba(142,232,255,0.48)"/>
-        <text x="12" y="102" class="tiny">network</text>
+    <g transform="translate(36 124)">
+      <g transform="scale(0.62)">
+        <path d="M72 0L136 26V78C136 118 104 146 72 160C40 146 8 118 8 78V26L72 0Z" fill="rgba(124,248,210,0.12)" stroke="#7CF8D2" stroke-width="2"/>
+        <path d="M45 78L65 99L103 54" stroke="#7CF8D2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#softGlow)"/>
+      </g>
+      <g transform="translate(136 7)">
+        <rect width="84" height="24" rx="6" fill="rgba(255,217,142,0.16)" stroke="rgba(255,217,142,0.50)"/>
+        <text x="42" y="12" class="badgeText" text-anchor="middle" dominant-baseline="middle">write</text>
+        <rect y="34" width="84" height="24" rx="6" fill="rgba(255,154,194,0.14)" stroke="rgba(255,154,194,0.48)"/>
+        <text x="42" y="46" class="badgeText" text-anchor="middle" dominant-baseline="middle">private</text>
+        <rect y="68" width="84" height="24" rx="6" fill="rgba(142,232,255,0.14)" stroke="rgba(142,232,255,0.48)"/>
+        <text x="42" y="80" class="badgeText" text-anchor="middle" dominant-baseline="middle">network</text>
       </g>
     </g>
   </g>
