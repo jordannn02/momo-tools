@@ -41,8 +41,14 @@ plugin/scripts/momo-tools route --prompt "Read this PDF, summarize it, do not sa
 plugin/scripts/momo-tools audit
 plugin/scripts/momo-tools benchmark
 plugin/scripts/momo-tools evidence
+plugin/scripts/momo-tools freshness --as-of 2026-07-10T12:00:00+00:00 --strict
 plugin/scripts/momo-tools pressure
 plugin/scripts/momo-tools test
+MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
+/tmp/momo-tools-public-install-test/bin/momo-tools test
+plugin/scripts/momo-tools integrity --installed-root /tmp/momo-tools-public-install-test --strict
+plugin/scripts/momo-tools recovery-drill --strict
+plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
 ```
 
 Or install a local copy:
@@ -121,7 +127,11 @@ See [docs/schemas.md](docs/schemas.md) for the JSON schema and YAML boundary.
 | `audit` | Runs the core routing fixture. |
 | `benchmark` | Runs the broader starter routing benchmark. |
 | `evidence` | Validates synthetic JSONL verification evidence. |
+| `freshness` | Assesses whether `verified-working` evidence is current at `--as-of`; strict mode rejects expired or invalid records. |
 | `pressure` | Runs conflict prompts such as no-save plus remember-this. |
+| `integrity [--installed-root PATH] [--strict]` | Hashes a fixed small set of public package files and optionally compares an installed public copy; strict mode requires an explicit installed root that is not the canonical source tree. |
+| `recovery-drill [--strict]` | Corrupts and restores a copy in a temporary workspace, then proves the canonical source bytes are unchanged. |
+| `slo [--as-of timestamp] [--evidence path] [--installed-root path] [--strict]` | Aggregates public validation, routing, freshness, integrity, and recovery checks into release health. |
 | `test` | Runs validation, audit, benchmark, and pressure checks together. |
 
 ## Verification Levels
@@ -149,6 +159,12 @@ This public version includes only synthetic examples:
 
 If you fork this project, keep your private capability index out of the public repo.
 
+## Trust Lifecycle Boundary
+
+The P2 commands operate only on the public package and, when supplied, one explicit installed-copy path. Run strict `integrity`, strict `slo`, and `recovery-drill` from a source checkout; the installed binary is smoke-tested with `test`. Strict comparison requires an independent installed copy and rejects the canonical source plugin or repository tree with `installed_root_is_canonical_source`, including when an installed binary is asked to compare its own root. `integrity` compares hashes; it does not monitor or protect any real installation. `recovery-drill` creates, corrupts, and restores only a temporary copy. `slo` is a local aggregation of public checks and makes no network, browser, or connector calls.
+
+See [docs/trust-lifecycle.md](docs/trust-lifecycle.md) for the manifest, strict-mode behavior, and limitations.
+
 ## Project Shape
 
 ```text
@@ -167,6 +183,7 @@ docs/
   routing-benchmark.md
   schemas.md
   tests.md
+  trust-lifecycle.md
   verification-levels.md
   workflows.md
 demo/

@@ -28,6 +28,9 @@ jobs:
           test -f demo/app.js
           test -f demo/styles.css
 
+      - name: Run public unit tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Validate public package
         run: |
           plugin/scripts/momo-tools validate
@@ -35,16 +38,21 @@ jobs:
           plugin/scripts/momo-tools audit
           plugin/scripts/momo-tools benchmark
           plugin/scripts/momo-tools evidence
+          plugin/scripts/momo-tools freshness --as-of 2026-07-10T12:00:00+00:00 --strict
           plugin/scripts/momo-tools pressure
           plugin/scripts/momo-tools test
 
       - name: Validate YAML example
         run: plugin/scripts/momo-tools --index plugin/capabilities.example.yaml validate
 
-      - name: Install smoke test
+      - name: Install smoke test and source trust comparison
         run: |
-          MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
-          /tmp/momo-tools-public-install-test/bin/momo-tools test
+          tmp=$(mktemp -d)
+          MOMO_TOOLS_HOME="$tmp" scripts/install-local.sh
+          "$tmp/bin/momo-tools" test
+          plugin/scripts/momo-tools integrity --installed-root "$tmp" --strict
+          plugin/scripts/momo-tools recovery-drill --strict
+          plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root "$tmp" --strict
 
       - name: Private-context leak scan
         run: |
