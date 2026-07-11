@@ -12,8 +12,8 @@
     - read-only
   source: public example
   owner: local user
-  version: 0.2.0-public
-  last_verified: 2026-07-08
+  version: 0.2.1-public
+  last_verified: 2026-07-11
   verification_level: verified-working
   known_caveats:
     - Example index only. Replace with your own local capabilities.

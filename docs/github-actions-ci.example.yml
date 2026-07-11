@@ -71,6 +71,30 @@ jobs:
           plugin/scripts/momo-tools integrity --installed-root "$tmp" --strict
           plugin/scripts/momo-tools recovery-drill --strict
           plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root "$tmp" --strict
+          doctor_report="$tmp/doctor.json"
+          repair_report="$tmp/repair-plan.json"
+          plugin/scripts/momo-tools doctor --as-of 2026-07-10T12:00:00+00:00 --installed-root "$tmp" --json --strict > "$doctor_report"
+          plugin/scripts/momo-tools repair-plan --dry-run --as-of 2026-07-10T12:00:00+00:00 --installed-root "$tmp" --json --strict > "$repair_report"
+          python - "$doctor_report" "$repair_report" <<'PY'
+          import json
+          import sys
+
+          doctor = json.load(open(sys.argv[1], encoding="utf-8"))
+          repair = json.load(open(sys.argv[2], encoding="utf-8"))
+          if not (
+              doctor["read_only"] is True
+              and doctor["health_status"] == "ok"
+              and doctor["capability_execution"] is False
+              and doctor["external_calls"] is False
+              and doctor["write_scope"] == "none"
+              and repair["dry_run"] is True
+              and repair["read_only"] is True
+              and repair["applied"] is False
+              and repair["plan_status"] == "no-op"
+              and repair["write_operations_executed"] == 0
+          ):
+              raise SystemExit("doctor or repair-plan safety contract failed")
+          PY
 
       - name: Build reproducible release snapshot
         run: |
@@ -109,6 +133,30 @@ jobs:
           "$snapshot_root/plugin/scripts/momo-tools" integrity --installed-root "$installed_root" --strict
           "$snapshot_root/plugin/scripts/momo-tools" recovery-drill --strict
           "$snapshot_root/plugin/scripts/momo-tools" slo --as-of 2026-07-10T12:00:00+00:00 --installed-root "$installed_root" --strict
+          doctor_report="$snapshot_extract/doctor.json"
+          repair_report="$snapshot_extract/repair-plan.json"
+          "$snapshot_root/plugin/scripts/momo-tools" doctor --as-of 2026-07-10T12:00:00+00:00 --installed-root "$installed_root" --json --strict > "$doctor_report"
+          "$snapshot_root/plugin/scripts/momo-tools" repair-plan --dry-run --as-of 2026-07-10T12:00:00+00:00 --installed-root "$installed_root" --json --strict > "$repair_report"
+          python - "$doctor_report" "$repair_report" <<'PY'
+          import json
+          import sys
+
+          doctor = json.load(open(sys.argv[1], encoding="utf-8"))
+          repair = json.load(open(sys.argv[2], encoding="utf-8"))
+          if not (
+              doctor["read_only"] is True
+              and doctor["health_status"] == "ok"
+              and doctor["capability_execution"] is False
+              and doctor["external_calls"] is False
+              and doctor["write_scope"] == "none"
+              and repair["dry_run"] is True
+              and repair["read_only"] is True
+              and repair["applied"] is False
+              and repair["plan_status"] == "no-op"
+              and repair["write_operations_executed"] == 0
+          ):
+              raise SystemExit("snapshot doctor or repair-plan safety contract failed")
+          PY
 
       - name: Upload release snapshot
         uses: actions/upload-artifact@v4

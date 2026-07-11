@@ -15,6 +15,8 @@ Use this before publishing or tagging a release.
 - [ ] From the source checkout, run `plugin/scripts/momo-tools integrity --installed-root /tmp/momo-tools-public-install-test --strict`.
 - [ ] Run `plugin/scripts/momo-tools recovery-drill --strict` and confirm `temporary_only`, `source_unchanged`, and `passed` are all `true`.
 - [ ] From the source checkout, run `plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict`.
+- [ ] Run strict source `doctor` against the independent install and confirm `read_only=true`, `health_status=ok`, no capability/external calls, and `write_scope=none`.
+- [ ] Run strict `repair-plan --dry-run` against the same install and confirm `read_only=true`, `applied=false`, `plan_status=no-op`, and zero write operations.
 - [ ] Run `plugin/scripts/momo-tools --index plugin/capabilities.example.yaml validate`.
 - [ ] Compare that temporary install with `integrity --installed-root /tmp/momo-tools-public-install-test --strict`.
 - [ ] Confirm release notes do not claim that integrity or recovery protects a user's real installation.
@@ -23,11 +25,12 @@ Use this before publishing or tagging a release.
 - [ ] Confirm `capabilities.schema.json` still matches required fields in the CLI.
 - [ ] Confirm license is intentional.
 - [ ] Build the exact committed release SHA twice and byte-compare archive, checksum, and snapshot manifest.
-- [ ] Extract the snapshot and rerun installer, installed `test`, strict integrity, recovery drill, and strict SLO from the extracted tree.
+- [ ] Extract the snapshot and rerun installer, installed `test`, strict integrity, recovery drill, strict SLO, strict doctor, and strict dry-run repair from the extracted tree.
 - [ ] Confirm `.github/workflows/ci.yml` passes on GitHub.
 - [ ] Enable GitHub release immutability before creating the new release.
 - [ ] Create the release as a draft, attach archive/checksum/manifest, then publish.
-- [ ] Confirm `gh release verify TAG` and `gh release verify-asset TAG ARCHIVE` both succeed.
+- [ ] Confirm `gh release verify TAG` succeeds.
+- [ ] Confirm `gh release verify-asset TAG FILE` succeeds separately for the snapshot JSON, tar archive, and checksum file.
 
 ## Private Context Scan
 

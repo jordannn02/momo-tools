@@ -140,6 +140,33 @@ class EvidenceFreshnessCliTests(unittest.TestCase):
         strict_result = self.run_cli("freshness", evidence, strict=True)
         self.assertEqual(strict_result.returncode, 1, strict_result.stderr)
 
+    def test_fresh_verified_working_evidence_with_failed_status_is_invalid(self):
+        evidence = self.write_evidence(
+            [
+                {
+                    "capability": "failed-check",
+                    "level": "verified-working",
+                    "status": "failed",
+                    "checked_at": "2026-07-10T10:00:00+00:00",
+                    "valid_until": "2026-07-10T13:00:00+00:00",
+                    "command": "synthetic failing fixture",
+                    "evidence_ref": "tests/test_evidence_freshness.py",
+                    "risk_boundary": ["synthetic only"],
+                }
+            ]
+        )
+
+        result = self.run_cli("freshness", evidence)
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual({"invalid": 1}, report["freshness"])
+        self.assertEqual({"degraded": 1}, report["effective_levels"])
+        self.assertIn("status", report["records"][0]["errors"][0])
+
+        strict_result = self.run_cli("freshness", evidence, strict=True)
+        self.assertEqual(1, strict_result.returncode, strict_result.stderr)
+
     def test_evidence_reports_the_same_freshness_summary_and_only_strict_fails(self):
         evidence = self.write_evidence(
             [
