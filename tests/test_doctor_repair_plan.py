@@ -1,3 +1,4 @@
+import hashlib
 import importlib.machinery
 import importlib.util
 import json
@@ -297,6 +298,18 @@ class PublicDoctorCliTests(unittest.TestCase):
             self.temporary_file(
                 "assertionless-cases.json",
                 '[{"id":"no-assertions","prompt":"unrelated words"}]\n',
+            ),
+            self.temporary_file(
+                "blank-expected.json",
+                '[{"id":"blank-expected","prompt":"unrelated words","expected":["  "]}]\n',
+            ),
+            self.temporary_file(
+                "blank-forbidden.json",
+                '[{"id":"blank-forbidden","prompt":"unrelated words","forbidden":[""]}]\n',
+            ),
+            self.temporary_file(
+                "blank-must-gate.json",
+                '[{"id":"blank-must-gate","prompt":"unrelated words","must_gate":["   "]}]\n',
             ),
         )
         for fixture in fixtures:
@@ -616,6 +629,124 @@ class PublicRepairPlanTests(unittest.TestCase):
 
         self.assertEqual("blocked", report["plan_status"])
         self.assertEqual("blocked-canonical-unproven", report["actions"][0]["action_type"])
+
+    def test_missing_target_directory_swap_is_blocked(self):
+        install_root = self.installed_copy()
+        plugin_root = install_root / "plugin"
+        relative_path = "scripts/momo-tools"
+        target = plugin_root / relative_path
+        scripts_path = plugin_root / "scripts"
+        moved_scripts = plugin_root / "moved-scripts"
+        target.unlink()
+        expected_sha256 = hashlib.sha256(
+            (PLUGIN / relative_path).read_bytes()
+        ).hexdigest()
+        finding = self.finding(
+            "doctor-001",
+            "installed-missing",
+            subject=relative_path,
+            details={
+                "path": relative_path,
+                "expected_sha256": expected_sha256,
+            },
+        )
+        source = self.doctor_report(
+            [finding],
+            health_status="failed",
+            installed_root=str(install_root),
+        )
+        original_safe_directory_chain = self.cli.safe_directory_chain
+        swapped = False
+
+        def swap_after_precheck(root, checked_relative_path):
+            nonlocal swapped
+            result = original_safe_directory_chain(root, checked_relative_path)
+            if (
+                not swapped
+                and Path(root) == plugin_root
+                and checked_relative_path == relative_path
+            ):
+                scripts_path.rename(moved_scripts)
+                scripts_path.symlink_to(moved_scripts, target_is_directory=True)
+                swapped = True
+            return result
+
+        with mock.patch.object(
+            self.cli,
+            "safe_directory_chain",
+            side_effect=swap_after_precheck,
+        ):
+            report = self.cli.build_repair_plan(source, dry_run=True)
+
+        self.assertTrue(swapped)
+        self.assertEqual("blocked", report["plan_status"])
+        self.assertEqual(
+            "blocked-canonical-unproven",
+            report["actions"][0]["action_type"],
+        )
+
+    def test_stably_missing_target_has_advisory_plan(self):
+        install_root = self.installed_copy()
+        relative_path = "scripts/momo-tools"
+        (install_root / "plugin" / relative_path).unlink()
+        expected_sha256 = hashlib.sha256(
+            (PLUGIN / relative_path).read_bytes()
+        ).hexdigest()
+        finding = self.finding(
+            "doctor-001",
+            "installed-missing",
+            subject=relative_path,
+            details={
+                "path": relative_path,
+                "expected_sha256": expected_sha256,
+            },
+        )
+        source = self.doctor_report(
+            [finding],
+            health_status="failed",
+            installed_root=str(install_root),
+        )
+
+        report = self.cli.build_repair_plan(source, dry_run=True)
+
+        self.assertEqual("ready", report["plan_status"])
+        self.assertEqual(
+            "advisory-reinstall-from-verified-release",
+            report["actions"][0]["action_type"],
+        )
+
+    def test_missing_target_proof_rechecks_open_directory_chain(self):
+        install_root = self.installed_copy()
+        plugin_root = install_root / "plugin"
+        relative_path = "scripts/momo-tools"
+        scripts_path = plugin_root / "scripts"
+        moved_scripts = plugin_root / "moved-scripts"
+        (plugin_root / relative_path).unlink()
+        original_open = self.cli.os.open
+        swapped = False
+
+        def swap_after_component_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = original_open(path, flags, *args, **kwargs)
+            if (
+                not swapped
+                and path == "scripts"
+                and kwargs.get("dir_fd") is not None
+            ):
+                scripts_path.rename(moved_scripts)
+                scripts_path.symlink_to(moved_scripts, target_is_directory=True)
+                swapped = True
+            return descriptor
+
+        with mock.patch.object(
+            self.cli.os,
+            "open",
+            side_effect=swap_after_component_open,
+        ):
+            with self.assertRaises(self.cli.UnsafePathComponent):
+                self.cli.missing_file_is_stable_at(plugin_root, relative_path)
+
+        self.assertTrue(swapped)
 
     def test_expired_evidence_only_recommends_bounded_reverification(self):
         finding = self.finding(
