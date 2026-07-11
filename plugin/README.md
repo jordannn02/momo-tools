@@ -17,5 +17,10 @@ plugin/scripts/momo-tools validate
 plugin/scripts/momo-tools benchmark
 plugin/scripts/momo-tools evidence
 plugin/scripts/momo-tools test
+MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
+plugin/scripts/momo-tools doctor --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
+plugin/scripts/momo-tools repair-plan --dry-run --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
 scripts/build-release-snapshot.sh --ref HEAD --output-dir dist/release
 ```
+
+`doctor` reads only explicit public fixtures and an optional installed-copy path. It never discovers a private index, scans a home/cache directory, runs a capability, or invokes the recovery drill. `repair-plan` has no apply mode and emits advisory or blocked actions only.

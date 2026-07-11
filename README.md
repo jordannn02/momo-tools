@@ -49,6 +49,8 @@ MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
 plugin/scripts/momo-tools integrity --installed-root /tmp/momo-tools-public-install-test --strict
 plugin/scripts/momo-tools recovery-drill --strict
 plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
+plugin/scripts/momo-tools doctor --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
+plugin/scripts/momo-tools repair-plan --dry-run --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
 scripts/build-release-snapshot.sh --ref HEAD --output-dir dist/release
 ```
 
@@ -133,6 +135,8 @@ See [docs/schemas.md](docs/schemas.md) for the JSON schema and YAML boundary.
 | `integrity [--installed-root PATH] [--strict]` | Hashes a fixed public manifest and optionally compares an installed copy; strict mode requires an independent installed root, rejects aliases and non-regular artifacts, and reports read failures as JSON. |
 | `recovery-drill [--strict]` | Corrupts and restores a copy in a temporary workspace, then proves the canonical source bytes are unchanged. |
 | `slo [--as-of timestamp] [--evidence path] [--installed-root path] [--strict]` | Aggregates public validation, routing, freshness, integrity, and recovery checks into release health. |
+| `doctor [--as-of timestamp] [--evidence path] [--installed-root path] [--strict]` | Aggregates public-only diagnostics without running a capability or recovery drill; strict mode requires an independent installed copy and healthy checks. |
+| `repair-plan --dry-run [doctor options] [--strict]` | Converts every doctor finding into deterministic advisory or blocked action without applying changes; strict mode fails when source health is not `ok` or any action is blocked. |
 | `test` | Runs validation, audit, benchmark, and pressure checks together. |
 
 ## Verification Levels
@@ -162,7 +166,7 @@ If you fork this project, keep your private capability index out of the public r
 
 ## Trust Lifecycle Boundary
 
-The P2 commands operate only on the public package and, when supplied, one explicit installed-copy path. Run strict `integrity`, strict `slo`, and `recovery-drill` from a source checkout; the installed binary is smoke-tested with `test`. Strict comparison requires an independent installed copy and rejects the canonical source plugin or repository tree with `installed_root_is_canonical_source`, including when an installed binary is asked to compare its own root. It also rejects any manifest artifact that aliases its source counterpart through a symlink or hardlink, reports those paths in `source_aliases`, and opens artifacts non-blockingly before requiring a regular file. Source or installed read/type failures are returned without a traceback. `integrity` compares hashes; it does not monitor or protect any real installation. `recovery-drill` creates, corrupts, and restores only a temporary copy. `slo` is a local aggregation of public checks and makes no network, browser, or connector calls.
+The trust commands operate only on the public package and, when supplied, one explicit installed-copy path. Run strict `integrity`, strict `slo`, strict `doctor`, and `recovery-drill` from a source checkout; the installed binary is smoke-tested with `test`. Strict comparison requires an independent installed copy and rejects the canonical source plugin or repository tree with `installed_root_is_canonical_source`, including when an installed binary is asked to compare its own root. It also rejects any manifest artifact that aliases its source counterpart through a symlink or hardlink, including symlinks to independent equal-byte files. Artifact inspection uses `lstat`, `O_NOFOLLOW`, non-blocking open, regular-file checks, stable identity, and pre/post hash metadata checks. Source or installed read/type failures are returned without a traceback. `integrity` compares hashes; it does not monitor or protect any real installation. `recovery-drill` creates, corrupts, and restores only a temporary copy. `slo` aggregates release checks. `doctor` aggregates public diagnostics but deliberately skips recovery, capability execution, private discovery, and external calls. `repair-plan --dry-run` has no apply mode and never writes.
 
 See [docs/trust-lifecycle.md](docs/trust-lifecycle.md) for the manifest, strict-mode behavior, and limitations.
 

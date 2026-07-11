@@ -210,6 +210,11 @@ class ReleaseSnapshotContractTests(unittest.TestCase):
             '"$snapshot_root/plugin/scripts/momo-tools" recovery-drill', workflow
         )
         self.assertIn('"$snapshot_root/plugin/scripts/momo-tools" slo', workflow)
+        self.assertIn('"$snapshot_root/plugin/scripts/momo-tools" doctor', workflow)
+        self.assertIn(
+            '"$snapshot_root/plugin/scripts/momo-tools" repair-plan --dry-run',
+            workflow,
+        )
 
 
 if __name__ == "__main__":

@@ -611,19 +611,51 @@ class NonRegularFile(OSError):
     pass
 
 
+class UnstableFile(OSError):
+    pass
+
+
 def regular_file_identity_and_sha256(path):
-    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0)
+    path = Path(path)
+    path_stat = path.lstat()
+    if not stat.S_ISREG(path_stat.st_mode):
+        raise NonRegularFile(f"not a regular file: {path}")
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
     descriptor = None
     try:
         descriptor = os.open(path, flags)
-        artifact_stat = os.fstat(descriptor)
-        if not stat.S_ISREG(artifact_stat.st_mode):
+        opened_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(opened_stat.st_mode):
             raise NonRegularFile(f"not a regular file: {path}")
+        if (path_stat.st_dev, path_stat.st_ino) != (
+            opened_stat.st_dev,
+            opened_stat.st_ino,
+        ):
+            raise UnstableFile(f"file identity changed before open: {path}")
         stream = os.fdopen(descriptor, "rb", closefd=True)
         descriptor = None
         with stream:
             artifact_sha256 = sha256_stream(stream)
-        return artifact_stat, artifact_sha256
+            final_stat = os.fstat(stream.fileno())
+        if (
+            opened_stat.st_dev,
+            opened_stat.st_ino,
+            opened_stat.st_size,
+            opened_stat.st_mtime_ns,
+        ) != (
+            final_stat.st_dev,
+            final_stat.st_ino,
+            final_stat.st_size,
+            final_stat.st_mtime_ns,
+        ):
+            raise UnstableFile(f"file changed while hashing: {path}")
+        return final_stat, artifact_sha256
     finally:
         if descriptor is not None:
             os.close(descriptor)
@@ -667,6 +699,16 @@ def integrity_report(installed_root, strict):
             continue
 
         installed_path = installed_root / relative_path
+        try:
+            installed_lstat = installed_path.lstat()
+            if stat.S_ISLNK(installed_lstat.st_mode):
+                try:
+                    if installed_path.resolve(strict=True) == source_path.resolve(strict=True):
+                        source_aliases.append(relative_path)
+                except OSError:
+                    pass
+        except OSError:
+            pass
         try:
             installed_stat, installed_sha256 = regular_file_identity_and_sha256(
                 installed_path
@@ -849,6 +891,703 @@ def cmd_slo(args):
     return 0 if report["ok"] else 1
 
 
+def display_public_path(path):
+    if path is None:
+        return None
+    candidate = Path(path)
+    try:
+        return str(candidate.resolve(strict=False).relative_to(ROOT.parent.resolve()))
+    except (OSError, ValueError):
+        return str(candidate)
+
+
+def doctor_finding(severity, category, subject, details=None, repair_code=None):
+    return {
+        "severity": severity,
+        "category": category,
+        "subject": str(subject),
+        "details": dict(details or {}),
+        "repair_code": repair_code or category,
+    }
+
+
+def probe_error_details(exc):
+    return {
+        "error": type(exc).__name__,
+        "message": str(exc),
+    }
+
+
+def build_doctor_report(
+    *,
+    index=DEFAULT_INDEX,
+    cases=DEFAULT_CASES,
+    benchmark_cases=DEFAULT_BENCHMARK,
+    evidence=DEFAULT_EVIDENCE,
+    installed_root=None,
+    as_of=None,
+    integrity_strict=False,
+):
+    try:
+        as_of_timestamp = evidence_as_of(as_of)
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from exc
+
+    index = Path(index)
+    cases = Path(cases)
+    benchmark_cases = Path(benchmark_cases)
+    evidence = Path(evidence)
+    installed_root = Path(installed_root) if installed_root is not None else None
+    findings = []
+    checks = {}
+
+    capabilities = None
+    try:
+        capabilities = load_index(index)
+        errors = validation_errors(capabilities)
+        checks["index_validation"] = {
+            "health_status": "failed" if errors else "ok",
+            "error_count": len(errors),
+            "errors": errors,
+        }
+        if errors:
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    "index-validation",
+                    display_public_path(index),
+                    {"errors": errors},
+                )
+            )
+    except (SystemExit, OSError, ValueError, json.JSONDecodeError) as exc:
+        checks["index_validation"] = {
+            "health_status": "failed",
+            "error_count": 1,
+            "errors": [probe_error_details(exc)],
+        }
+        findings.append(
+            doctor_finding(
+                "failed",
+                "probe-error",
+                "index_validation",
+                probe_error_details(exc),
+                "investigate-probe",
+            )
+        )
+
+    if capabilities is None:
+        dependency_error = {
+            "error": "DependencyUnavailable",
+            "message": "routing checks require a readable public index",
+        }
+        checks["routing_regression"] = {
+            "health_status": "failed",
+            "audit": {"case_count": 0, "fail_count": 0},
+            "benchmark": {"case_count": 0, "fail_count": 0},
+            "pressure": {"case_count": 0, "fail_count": 0},
+            "errors": [dependency_error],
+        }
+        findings.append(
+            doctor_finding(
+                "failed",
+                "probe-error",
+                "routing_regression",
+                dependency_error,
+                "investigate-probe",
+            )
+        )
+    else:
+        try:
+            audit_cases = load_cases(cases)
+            audit_ok, audit_results = evaluate_cases(capabilities, audit_cases)
+            benchmark_fixture = load_cases(benchmark_cases)
+            benchmark_ok, benchmark_results = evaluate_cases(
+                capabilities, benchmark_fixture
+            )
+            pressure = pressure_report(capabilities)
+            audit_fail_count = sum(
+                1 for result in audit_results if not result["passed"]
+            )
+            benchmark_fail_count = sum(
+                1 for result in benchmark_results if not result["passed"]
+            )
+            pressure_fail_count = sum(
+                1 for result in pressure["results"] if not result["passed"]
+            )
+            routing_ok = audit_ok and benchmark_ok and pressure["ok"]
+            routing_details = {
+                "audit": {
+                    "case_count": len(audit_results),
+                    "fail_count": audit_fail_count,
+                },
+                "benchmark": {
+                    "case_count": len(benchmark_results),
+                    "fail_count": benchmark_fail_count,
+                },
+                "pressure": {
+                    "case_count": pressure["case_count"],
+                    "fail_count": pressure_fail_count,
+                },
+            }
+            checks["routing_regression"] = {
+                "health_status": "ok" if routing_ok else "failed",
+                **routing_details,
+                "errors": [],
+            }
+            if not routing_ok:
+                findings.append(
+                    doctor_finding(
+                        "failed",
+                        "routing-regression",
+                        "public-fixtures",
+                        routing_details,
+                        "fix-routing-source-and-tests",
+                    )
+                )
+        except (SystemExit, OSError, ValueError, json.JSONDecodeError) as exc:
+            checks["routing_regression"] = {
+                "health_status": "failed",
+                "audit": {"case_count": 0, "fail_count": 0},
+                "benchmark": {"case_count": 0, "fail_count": 0},
+                "pressure": {"case_count": 0, "fail_count": 0},
+                "errors": [probe_error_details(exc)],
+            }
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    "probe-error",
+                    "routing_regression",
+                    probe_error_details(exc),
+                    "investigate-probe",
+                )
+            )
+
+    try:
+        records, evidence_errors = load_evidence(evidence)
+        assessed = assess_evidence(records, as_of_timestamp)
+        expired = [item for item in assessed if item["freshness"] == "expired"]
+        invalid = [item for item in assessed if item["freshness"] == "invalid"]
+        evidence_health = "degraded" if expired or invalid or evidence_errors else "ok"
+        checks["evidence_freshness"] = {
+            "health_status": evidence_health,
+            "record_count": len(records),
+            "expired_count": len(expired),
+            "invalid_count": len(invalid) + len(evidence_errors),
+            "errors": evidence_errors,
+        }
+        for record in expired + invalid:
+            category = (
+                "expired-evidence"
+                if record["freshness"] == "expired"
+                else "invalid-evidence"
+            )
+            findings.append(
+                doctor_finding(
+                    "degraded",
+                    category,
+                    record["capability"],
+                    {
+                        "freshness": record["freshness"],
+                        "errors": record["errors"],
+                    },
+                    "rerun-safe-verification",
+                )
+            )
+        if evidence_errors:
+            findings.append(
+                doctor_finding(
+                    "degraded",
+                    "invalid-evidence",
+                    display_public_path(evidence),
+                    {"errors": evidence_errors},
+                    "rerun-safe-verification",
+                )
+            )
+    except (SystemExit, OSError, ValueError, json.JSONDecodeError) as exc:
+        checks["evidence_freshness"] = {
+            "health_status": "failed",
+            "record_count": 0,
+            "expired_count": 0,
+            "invalid_count": 0,
+            "errors": [probe_error_details(exc)],
+        }
+        findings.append(
+            doctor_finding(
+                "failed",
+                "probe-error",
+                "evidence_freshness",
+                probe_error_details(exc),
+                "investigate-probe",
+            )
+        )
+
+    try:
+        integrity = integrity_report(installed_root, integrity_strict)
+        manifest_hashes = {
+            item["path"]: item["sha256"] for item in integrity["manifest"]
+        }
+        checks["package_integrity"] = {
+            "health_status": "ok" if integrity["ok"] else "failed",
+            "installed_copy_checked": integrity["installed_copy_checked"],
+            "source_missing_count": len(integrity["source_missing"]),
+            "source_read_error_count": len(integrity["source_read_errors"]),
+            "installed_missing_count": len(integrity["missing"]),
+            "installed_mismatch_count": len(integrity["mismatched"]),
+            "installed_alias_count": len(integrity["source_aliases"]),
+            "installed_read_error_count": len(integrity["installed_read_errors"]),
+            "errors": list(integrity["errors"]),
+        }
+        for relative_path in integrity["source_missing"]:
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    "source-missing",
+                    relative_path,
+                    {"path": relative_path},
+                    "restore-public-source",
+                )
+            )
+        for item in integrity["source_read_errors"]:
+            category = (
+                "source-unstable"
+                if item["error"] == "UnstableFile"
+                else "source-unsafe"
+                if item["error"] == "NonRegularFile"
+                else "source-read-error"
+            )
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    category,
+                    item["path"],
+                    dict(item),
+                    "investigate-public-source",
+                )
+            )
+        for relative_path in integrity["missing"]:
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    "installed-missing",
+                    relative_path,
+                    {
+                        "path": relative_path,
+                        "expected_sha256": manifest_hashes.get(relative_path),
+                    },
+                    "reinstall-verified-public-package",
+                )
+            )
+        for relative_path in integrity["mismatched"]:
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    "installed-mismatch",
+                    relative_path,
+                    {
+                        "path": relative_path,
+                        "expected_sha256": manifest_hashes.get(relative_path),
+                    },
+                    "reinstall-verified-public-package",
+                )
+            )
+        for relative_path in integrity["source_aliases"]:
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    "installed-alias",
+                    relative_path,
+                    {"path": relative_path},
+                    "remove-installed-alias",
+                )
+            )
+        for item in integrity["installed_read_errors"]:
+            category = (
+                "installed-unstable"
+                if item["error"] == "UnstableFile"
+                else "installed-unsafe"
+                if item["error"] == "NonRegularFile"
+                else "installed-read-error"
+            )
+            findings.append(
+                doctor_finding(
+                    "failed",
+                    category,
+                    item["path"],
+                    dict(item),
+                    "investigate-installed-artifact",
+                )
+            )
+        error_categories = {
+            "installed_root_required": "installed-root-required",
+            "installed_root_is_canonical_source": "installed-root-alias",
+        }
+        for error in integrity["errors"]:
+            category = error_categories.get(error)
+            if category is not None:
+                findings.append(
+                    doctor_finding(
+                        "failed",
+                        category,
+                        "--installed-root",
+                        {"error": error},
+                        "select-independent-installed-root",
+                    )
+                )
+    except (SystemExit, OSError, ValueError, json.JSONDecodeError) as exc:
+        checks["package_integrity"] = {
+            "health_status": "failed",
+            "installed_copy_checked": installed_root is not None,
+            "source_missing_count": 0,
+            "source_read_error_count": 0,
+            "installed_missing_count": 0,
+            "installed_mismatch_count": 0,
+            "installed_alias_count": 0,
+            "installed_read_error_count": 0,
+            "errors": [probe_error_details(exc)],
+        }
+        findings.append(
+            doctor_finding(
+                "failed",
+                "probe-error",
+                "package_integrity",
+                probe_error_details(exc),
+                "investigate-probe",
+            )
+        )
+
+    severity_rank = {"failed": 2, "degraded": 1}
+    overall_status = "ok"
+    if findings:
+        overall_status = max(
+            (finding["severity"] for finding in findings),
+            key=lambda value: severity_rank.get(value, 2),
+        )
+    numbered_findings = [
+        {"id": f"doctor-{index_number:03d}", **finding}
+        for index_number, finding in enumerate(findings, 1)
+    ]
+    return {
+        "schema_version": 1,
+        "command": "doctor",
+        "read_only": True,
+        "health_status": overall_status,
+        "as_of": as_of_timestamp.isoformat(),
+        "public_scope": True,
+        "index_path": display_public_path(index),
+        "installed_root": str(installed_root) if installed_root is not None else None,
+        "checks": checks,
+        "findings": numbered_findings,
+        "capability_execution": False,
+        "external_calls": False,
+        "network_calls": False,
+        "browser_calls": False,
+        "connector_calls": False,
+        "write_scope": "none",
+        "evidence_boundary": (
+            "Public package metadata, synthetic routing fixtures, synthetic evidence, "
+            "and an optional explicit installed-copy byte comparison only; no capability, "
+            "recovery drill, network, browser, connector, private index, or write action executed."
+        ),
+    }
+
+
+def doctor_source_inconsistencies(report):
+    errors = []
+    if not isinstance(report, dict):
+        return ["doctor report must be an object"]
+    if report.get("schema_version") != 1:
+        errors.append("unsupported doctor schema")
+    if report.get("command") != "doctor":
+        errors.append("source command is not doctor")
+    if report.get("read_only") is not True:
+        errors.append("doctor report is not read-only")
+    if report.get("public_scope") is not True:
+        errors.append("doctor report is not public-scope")
+    if report.get("capability_execution") is not False:
+        errors.append("doctor report executed a capability")
+    if report.get("external_calls") is not False:
+        errors.append("doctor report made an external call")
+    for boundary in ("network_calls", "browser_calls", "connector_calls"):
+        if report.get(boundary) is not False:
+            errors.append(f"doctor report has invalid {boundary} boundary")
+    if report.get("write_scope") != "none":
+        errors.append("doctor report has a write scope")
+    if report.get("health_status") not in {"ok", "degraded", "failed"}:
+        errors.append("doctor report has an invalid health status")
+    findings = report.get("findings")
+    if not isinstance(findings, list):
+        errors.append("doctor findings must be a list")
+    else:
+        required_finding_fields = {
+            "id",
+            "severity",
+            "category",
+            "subject",
+            "details",
+            "repair_code",
+        }
+        finding_ids = []
+        for index_number, finding in enumerate(findings, 1):
+            if not isinstance(finding, dict):
+                errors.append(f"doctor finding {index_number} must be an object")
+                continue
+            if set(finding) != required_finding_fields:
+                errors.append(f"doctor finding {index_number} has an invalid schema")
+            if finding.get("severity") not in {"degraded", "failed"}:
+                errors.append(f"doctor finding {index_number} has an invalid severity")
+            if not isinstance(finding.get("id"), str) or not finding.get("id"):
+                errors.append(f"doctor finding {index_number} has an invalid id")
+            else:
+                finding_ids.append(finding["id"])
+            if not isinstance(finding.get("category"), str) or not finding.get("category"):
+                errors.append(f"doctor finding {index_number} has an invalid category")
+            if not isinstance(finding.get("subject"), str) or not finding.get("subject"):
+                errors.append(f"doctor finding {index_number} has an invalid subject")
+            if not isinstance(finding.get("details"), dict):
+                errors.append(f"doctor finding {index_number} details must be an object")
+        if len(finding_ids) != len(set(finding_ids)):
+            errors.append("doctor finding ids must be unique")
+        if report.get("health_status") == "ok" and findings:
+            errors.append("healthy doctor report contains findings")
+        elif report.get("health_status") != "ok" and not findings:
+            errors.append("non-healthy doctor report contains no findings")
+    return errors
+
+
+def build_repair_plan(doctor_report, *, dry_run=False):
+    if not dry_run:
+        raise ValueError("repair-plan requires --dry-run; apply mode is not implemented")
+
+    inconsistencies = doctor_source_inconsistencies(doctor_report)
+    if inconsistencies:
+        source_health_status = "failed"
+        findings = [
+            {
+                "id": "doctor-inconsistent-001",
+                "severity": "failed",
+                "category": "inconsistent-doctor",
+                "subject": "doctor-report",
+                "details": {"errors": inconsistencies},
+                "repair_code": "investigate-doctor-report",
+            }
+        ]
+    else:
+        source_health_status = doctor_report["health_status"]
+        findings = list(doctor_report["findings"])
+    explicit_installed_root = (
+        doctor_report.get("installed_root")
+        if isinstance(doctor_report, dict)
+        else None
+    )
+
+    findings.sort(
+        key=lambda item: (
+            0 if item.get("severity") == "failed" else 1,
+            str(item.get("category", "")),
+            str(item.get("subject", "")),
+            str(item.get("id", "")),
+        )
+    )
+    actions = []
+    for finding in findings:
+        category = str(finding.get("category") or "unknown")
+        subject = str(finding.get("subject") or "<unknown>")
+        details = finding.get("details")
+        details = details if isinstance(details, dict) else {}
+        priority = "P0" if finding.get("severity") == "failed" else "P1"
+        action_type = "blocked-manual-review"
+        target = str(details.get("path") or subject)
+        procedure = (
+            "Inspect the public finding and establish an evidence-backed correction "
+            "before requesting a separate authorized change."
+        )
+        verification_commands = [
+            "momo-tools doctor --strict --installed-root <independent-installed-root>"
+        ]
+
+        if category in {"expired-evidence", "invalid-evidence"}:
+            action_type = "rerun-safe-verification"
+            procedure = (
+                "Rerun the documented bounded public fixture and record new evidence "
+                "only after the fixture passes."
+            )
+            verification_commands = [
+                "momo-tools freshness --strict",
+                "momo-tools doctor --strict --installed-root <independent-installed-root>",
+            ]
+        elif category == "index-validation":
+            action_type = "fix-index-metadata"
+            procedure = (
+                "Correct the public index metadata and keep every existing validation "
+                "and routing fixture enabled."
+            )
+            verification_commands = [
+                "momo-tools validate",
+                "momo-tools doctor --strict --installed-root <independent-installed-root>",
+            ]
+        elif category == "routing-regression":
+            action_type = "fix-routing-source-and-tests"
+            procedure = (
+                "Correct public routing source or fixtures and add a regression case "
+                "without weakening score or gate checks."
+            )
+            verification_commands = [
+                "momo-tools audit",
+                "momo-tools benchmark",
+                "momo-tools pressure",
+            ]
+        elif category in {"installed-missing", "installed-mismatch"}:
+            relative_path = str(details.get("path") or "")
+            expected_sha256 = details.get("expected_sha256")
+            if (
+                relative_path in PUBLIC_PACKAGE_ARTIFACTS
+                and isinstance(expected_sha256, str)
+                and re.fullmatch(r"[0-9a-f]{64}", expected_sha256)
+                and isinstance(explicit_installed_root, str)
+                and bool(explicit_installed_root.strip())
+            ):
+                action_type = "advisory-reinstall-from-verified-release"
+                target = relative_path
+                procedure = (
+                    "After separate authorization, reinstall this exact public artifact "
+                    "from a verified immutable release and compare it with the recorded hash."
+                )
+                verification_commands = [
+                    "momo-tools integrity --strict --installed-root <independent-installed-root>"
+                ]
+            else:
+                action_type = "blocked-canonical-unproven"
+                procedure = (
+                    "Do not replace this artifact until its allowlisted relative path and "
+                    "canonical public hash are proven."
+                )
+        elif category in {
+            "source-missing",
+            "source-read-error",
+            "source-unsafe",
+            "source-unstable",
+        }:
+            action_type = "blocked-source-package-review"
+            procedure = (
+                "Stop and restore a trusted public source checkout before planning any "
+                "installed-copy change."
+            )
+        elif category in {
+            "installed-alias",
+            "installed-read-error",
+            "installed-unsafe",
+            "installed-unstable",
+        }:
+            action_type = "blocked-unsafe-artifact"
+            procedure = (
+                "Do not copy through or replace this target while its type, identity, or "
+                "read stability is unsafe."
+            )
+        elif category in {"installed-root-required", "installed-root-alias"}:
+            action_type = "blocked-installed-root-review"
+            procedure = (
+                "Select an explicit independent installed-copy root before requesting a "
+                "separate authorized repair."
+            )
+        elif category == "probe-error":
+            action_type = "blocked-probe-investigation"
+            procedure = (
+                "Restore the public probe input or read boundary before planning any change."
+            )
+        elif category == "inconsistent-doctor":
+            action_type = "blocked-inconsistent-doctor"
+            procedure = (
+                "Reject this source report and rerun doctor from a trusted public CLI."
+            )
+
+        actions.append(
+            {
+                "id": f"repair-{len(actions) + 1:03d}",
+                "finding_id": finding.get("id"),
+                "priority": priority,
+                "action_type": action_type,
+                "target": target,
+                "reason": f"Doctor reported {category} for {subject}.",
+                "procedure": procedure,
+                "verification_commands": verification_commands,
+                "auto_applicable": False,
+                "requires_explicit_authorization": True,
+            }
+        )
+
+    blocked_count = sum(
+        1 for action in actions if action["action_type"].startswith("blocked-")
+    )
+    plan_status = "no-op" if not actions else ("blocked" if blocked_count else "ready")
+    return {
+        "schema_version": 1,
+        "command": "repair-plan",
+        "mode": "dry-run",
+        "dry_run": True,
+        "read_only": True,
+        "applied": False,
+        "source_health_status": source_health_status,
+        "plan_status": plan_status,
+        "source_finding_count": len(findings),
+        "action_count": len(actions),
+        "blocked_count": blocked_count,
+        "actions": actions,
+        "write_operations_executed": 0,
+        "evidence_boundary": (
+            "Planning only from a validated public doctor report and explicit public "
+            "artifact evidence; no file, evidence, capability, network, connector, or "
+            "external operation executed."
+        ),
+    }
+
+
+def cmd_doctor(args):
+    try:
+        report = build_doctor_report(
+            index=args.index,
+            cases=args.cases,
+            benchmark_cases=args.benchmark_cases,
+            evidence=args.evidence,
+            installed_root=args.installed_root,
+            as_of=args.as_of,
+            integrity_strict=args.strict,
+        )
+    except ValueError as exc:
+        print(f"doctor: {exc}", file=sys.stderr)
+        return 2
+    print_json(report)
+    return 1 if args.strict and report["health_status"] != "ok" else 0
+
+
+def cmd_repair_plan(args):
+    if not args.dry_run:
+        print(
+            "repair-plan requires --dry-run; apply mode is not implemented",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        doctor = build_doctor_report(
+            index=args.index,
+            cases=args.cases,
+            benchmark_cases=args.benchmark_cases,
+            evidence=args.evidence,
+            installed_root=args.installed_root,
+            as_of=args.as_of,
+            integrity_strict=args.strict,
+        )
+        report = build_repair_plan(doctor, dry_run=True)
+    except ValueError as exc:
+        print(f"repair-plan: {exc}", file=sys.stderr)
+        return 2
+    print_json(report)
+    if args.strict and (
+        report["source_health_status"] != "ok" or report["blocked_count"]
+    ):
+        return 1
+    return 0
+
+
 def cmd_test(args):
     capabilities = load_index(args.index)
     errors = validation_errors(capabilities)
@@ -920,6 +1659,25 @@ def build_parser():
     slo_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     slo_parser.add_argument("--benchmark-cases", type=Path, default=DEFAULT_BENCHMARK)
 
+    doctor_parser = sub.add_parser("doctor")
+    doctor_parser.add_argument("--as-of", default=None, help="Timezone-aware ISO 8601 timestamp")
+    doctor_parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    doctor_parser.add_argument("--installed-root", type=Path, default=None)
+    doctor_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
+    doctor_parser.add_argument("--benchmark-cases", type=Path, default=DEFAULT_BENCHMARK)
+    doctor_parser.add_argument("--json", action="store_true", help="Compatibility flag; public output is always JSON")
+    doctor_parser.add_argument("--strict", action="store_true", help="Require healthy diagnostics and an independent installed copy")
+
+    repair_parser = sub.add_parser("repair-plan")
+    repair_parser.add_argument("--dry-run", action="store_true")
+    repair_parser.add_argument("--as-of", default=None, help="Timezone-aware ISO 8601 timestamp")
+    repair_parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    repair_parser.add_argument("--installed-root", type=Path, default=None)
+    repair_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
+    repair_parser.add_argument("--benchmark-cases", type=Path, default=DEFAULT_BENCHMARK)
+    repair_parser.add_argument("--json", action="store_true", help="Compatibility flag; public output is always JSON")
+    repair_parser.add_argument("--strict", action="store_true", help="Fail when doctor is not healthy or the plan is blocked")
+
     test_parser = sub.add_parser("test")
     test_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     test_parser.add_argument("--benchmark-cases", type=Path, default=DEFAULT_BENCHMARK)
@@ -942,6 +1700,8 @@ def main(argv=None):
         "integrity": cmd_integrity,
         "recovery-drill": cmd_recovery_drill,
         "slo": cmd_slo,
+        "doctor": cmd_doctor,
+        "repair-plan": cmd_repair_plan,
         "test": cmd_test,
     }
     return commands[args.command](args)

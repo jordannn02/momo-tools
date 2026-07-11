@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.2.1-public - 2026-07-11
+
+- add public-safe `doctor` diagnostics over explicit public index, routing fixtures, evidence, and optional installed-copy inputs;
+- add deterministic `repair-plan --dry-run` output with no apply mode, one action per finding, unknown findings blocked by default, and strict CI semantics;
+- keep both commands read-only: no capability execution, private index discovery, home/cache scan, recovery drill, network call, or write operation;
+- make strict doctor require an explicitly named independent installed copy while non-strict doctor remains diagnostic;
+- reject symlinks to independent equal-byte artifacts by using `lstat`, `O_NOFOLLOW`, stable file identity, and pre/post hash metadata checks;
+- execute and assert doctor/repair safety contracts in source-install and extracted-release CI paths.
+
 ## v0.2.0-public - 2026-07-11
 
 - add strict public trust-lifecycle checks for evidence freshness, package integrity, recovery drills, and aggregate SLO health;

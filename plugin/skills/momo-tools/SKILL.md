@@ -33,6 +33,8 @@ Respect `verification_level`:
 ./plugin/scripts/momo-tools benchmark
 ./plugin/scripts/momo-tools evidence
 ./plugin/scripts/momo-tools pressure
+./plugin/scripts/momo-tools doctor --as-of 2026-07-10T12:00:00+00:00
+./plugin/scripts/momo-tools repair-plan --dry-run --as-of 2026-07-10T12:00:00+00:00
 ./plugin/scripts/momo-tools test
 ```
 
@@ -40,5 +42,6 @@ Respect `verification_level`:
 
 Routing is advisory. The agent must still obey user constraints, approval gates, and host application safety rules.
 
-MoMo_tools validation, benchmark, evidence, and pressure tests should not call real connectors, access browser profiles, read secrets, or mutate production systems.
+MoMo_tools validation, benchmark, evidence, pressure, doctor, and repair-plan checks should not call real connectors, access browser profiles, read secrets, or mutate production systems.
 
+Run strict `doctor` from a source checkout with an explicit independent `--installed-root`. Non-strict doctor is diagnostic. `repair-plan` requires `--dry-run`, has no apply mode, and must leave `applied=false` with `write_operations_executed=0`.

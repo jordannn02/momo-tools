@@ -16,6 +16,8 @@ agent choose a small, safe set for a task.
 | Gates | Flags risks and prompt conflicts before execution. |
 | Audit cases | Known task prompts that should route to expected capabilities. |
 | Pressure tests | High-conflict prompts such as "remember this" plus "do not save". |
+| Doctor | Aggregates explicit public validation, routing, freshness, and package-integrity checks without executing capabilities or recovery. |
+| Repair planner | Converts doctor findings into deterministic advisory or blocked dry-run actions with no apply mode. |
 
 ## Runtime Flow
 
@@ -54,4 +56,3 @@ advisory control layer.
 - `verification-levels.md`
 - `workflows.md`
 - `tests.md`
-

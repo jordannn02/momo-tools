@@ -158,6 +158,51 @@ class PublicTrustLifecycleCliTests(unittest.TestCase):
                 self.assertEqual(report["source_aliases"], list(PUBLIC_PACKAGE_ARTIFACTS))
                 self.assertIn("installed_artifacts_are_canonical_source_aliases", report["errors"])
 
+    def test_strict_integrity_rejects_symlink_to_independent_equal_bytes(self):
+        install_root = self.installed_copy()
+        relative_path = PUBLIC_PACKAGE_ARTIFACTS[0]
+        installed_path = install_root / "plugin" / relative_path
+        independent_path = install_root / "independent-copy"
+        shutil.copy2(installed_path, independent_path)
+        installed_path.unlink()
+        installed_path.symlink_to(independent_path)
+
+        result = self.run_cli(
+            "integrity",
+            "--installed-root",
+            str(install_root),
+            "--strict",
+        )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertFalse(report["ok"])
+        self.assertEqual(
+            report["installed_read_errors"],
+            [{"path": relative_path, "error": "NonRegularFile"}],
+        )
+        self.assertIn("installed_artifact_read_error", report["errors"])
+
+    def test_artifact_hash_rejects_file_changed_during_read(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        path = Path(temp_dir.name) / "artifact"
+        path.write_bytes(b"stable-before-hash\n")
+        original_sha256_stream = self.cli.sha256_stream
+
+        def mutate_after_hash(stream):
+            digest = original_sha256_stream(stream)
+            path.write_bytes(b"changed-after-hash-with-a-different-size\n")
+            return digest
+
+        with mock.patch.object(
+            self.cli,
+            "sha256_stream",
+            side_effect=mutate_after_hash,
+        ):
+            with self.assertRaises(self.cli.UnstableFile):
+                self.cli.regular_file_identity_and_sha256(path)
+
     def test_integrity_reports_installed_open_errors_without_traceback(self):
         install_root = self.installed_copy()
         failed_relative_path = PUBLIC_PACKAGE_ARTIFACTS[0]

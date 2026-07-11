@@ -94,6 +94,31 @@ class PublicCiContractTests(unittest.TestCase):
             result = self.run_block(block, non_git_dir)
         self.assertNotEqual(result.returncode, 0, "git grep failure was treated as a clean scan")
 
+    def test_doctor_and_repair_plan_gates_are_synced_and_assert_read_only_contracts(self):
+        step_names = (
+            "Install smoke test and source trust comparison",
+            "Smoke-test release snapshot artifact",
+        )
+        for step_name in step_names:
+            with self.subTest(step=step_name):
+                workflow_block = workflow_run_block(WORKFLOW, step_name)
+                example_block = workflow_run_block(WORKFLOW_EXAMPLE, step_name)
+                self.assertEqual(workflow_block, example_block)
+                self.assertIn(" doctor --as-of", workflow_block)
+                self.assertIn(" repair-plan --dry-run", workflow_block)
+                self.assertIn("--as-of 2026-07-10T12:00:00+00:00", workflow_block)
+                self.assertIn("--installed-root", workflow_block)
+                self.assertIn('doctor["read_only"] is True', workflow_block)
+                self.assertIn('doctor["health_status"] == "ok"', workflow_block)
+                self.assertIn('doctor["capability_execution"] is False', workflow_block)
+                self.assertIn('doctor["external_calls"] is False', workflow_block)
+                self.assertIn('doctor["write_scope"] == "none"', workflow_block)
+                self.assertIn('repair["dry_run"] is True', workflow_block)
+                self.assertIn('repair["read_only"] is True', workflow_block)
+                self.assertIn('repair["applied"] is False', workflow_block)
+                self.assertIn('repair["plan_status"] == "no-op"', workflow_block)
+                self.assertIn('repair["write_operations_executed"] == 0', workflow_block)
+
 
 if __name__ == "__main__":
     unittest.main()
