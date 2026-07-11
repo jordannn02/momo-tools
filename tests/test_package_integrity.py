@@ -281,19 +281,95 @@ class PublicTrustLifecycleCliTests(unittest.TestCase):
             with self.assertRaises(self.cli.UnstableFile):
                 self.cli.regular_file_identity_and_sha256(path)
 
+    def test_integrity_rejects_directory_swap_after_precheck(self):
+        install_root = self.installed_copy()
+        plugin_root = install_root / "plugin"
+        scripts_path = plugin_root / "scripts"
+        real_scripts = plugin_root / "real-scripts"
+        original_safe_directory_chain = self.cli.safe_directory_chain
+        swapped = False
+
+        def swap_after_precheck(root, relative_path):
+            nonlocal swapped
+            result = original_safe_directory_chain(root, relative_path)
+            if (
+                not swapped
+                and Path(root) == plugin_root
+                and relative_path == "scripts/momo-tools"
+            ):
+                scripts_path.rename(real_scripts)
+                scripts_path.symlink_to(real_scripts, target_is_directory=True)
+                swapped = True
+            return result
+
+        with mock.patch.object(
+            self.cli,
+            "safe_directory_chain",
+            side_effect=swap_after_precheck,
+        ):
+            report = self.cli.integrity_report(install_root, strict=True)
+
+        self.assertTrue(swapped)
+        self.assertFalse(report["ok"])
+        self.assertIn(
+            {"path": "scripts/momo-tools", "error": "UnsafePathComponent"},
+            report["installed_read_errors"],
+        )
+
+    def test_artifact_hash_rejects_directory_swap_during_descriptor_traversal(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        root = Path(temp_dir.name) / "plugin"
+        scripts_path = root / "scripts"
+        moved_scripts = root / "moved-scripts"
+        scripts_path.mkdir(parents=True)
+        (scripts_path / "momo-tools").write_bytes(b"trusted artifact\n")
+        original_open = os.open
+        swapped = False
+
+        def swap_after_component_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = original_open(path, flags, *args, **kwargs)
+            if (
+                not swapped
+                and path == "scripts"
+                and kwargs.get("dir_fd") is not None
+            ):
+                scripts_path.rename(moved_scripts)
+                scripts_path.symlink_to(moved_scripts, target_is_directory=True)
+                swapped = True
+            return descriptor
+
+        with mock.patch.object(
+            self.cli.os,
+            "open",
+            side_effect=swap_after_component_open,
+        ):
+            with self.assertRaises(self.cli.UnsafePathComponent):
+                self.cli.regular_file_identity_and_sha256_at(
+                    root, "scripts/momo-tools"
+                )
+
+        self.assertTrue(swapped)
+
     def test_integrity_reports_installed_open_errors_without_traceback(self):
         install_root = self.installed_copy()
         failed_relative_path = PUBLIC_PACKAGE_ARTIFACTS[0]
-        failed_path = install_root / "plugin" / failed_relative_path
-        original_open = os.open
+        installed_plugin_root = install_root / "plugin"
+        original_read = self.cli.regular_file_identity_and_sha256_at
 
-        def fail_one_installed_artifact(path, *args, **kwargs):
-            if Path(path) == failed_path:
+        def fail_one_installed_artifact(root, relative_path):
+            if (
+                Path(root) == installed_plugin_root
+                and relative_path == failed_relative_path
+            ):
                 raise OSError("fixture installed read failure")
-            return original_open(path, *args, **kwargs)
+            return original_read(root, relative_path)
 
         with mock.patch.object(
-            self.cli.os, "open", side_effect=fail_one_installed_artifact
+            self.cli,
+            "regular_file_identity_and_sha256_at",
+            side_effect=fail_one_installed_artifact,
         ):
             report = self.cli.integrity_report(install_root, strict=True)
 

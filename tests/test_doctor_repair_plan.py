@@ -294,6 +294,10 @@ class PublicDoctorCliTests(unittest.TestCase):
             self.temporary_file("empty-cases.json", "[]\n"),
             self.temporary_file("object-cases.json", "{}\n"),
             self.temporary_file("null-row-cases.json", "[null]\n"),
+            self.temporary_file(
+                "assertionless-cases.json",
+                '[{"id":"no-assertions","prompt":"unrelated words"}]\n',
+            ),
         )
         for fixture in fixtures:
             for option in ("--cases", "--benchmark-cases"):

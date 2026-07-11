@@ -419,6 +419,10 @@ def load_cases(path: Path):
                 raise SystemExit(
                     f"route case {case_id!r} field {field} must be a string array: {path}"
                 )
+        if not any(case.get(field, []) for field in ("expected", "forbidden", "must_gate")):
+            raise SystemExit(
+                f"route case {case_id!r} must contain at least one assertion: {path}"
+            )
     return cases
 
 
@@ -709,6 +713,151 @@ def regular_file_identity_and_sha256(path):
             os.close(descriptor)
 
 
+def regular_file_identity_and_sha256_at(root, relative_path):
+    root = Path(root)
+    relative = Path(relative_path)
+    parts = relative.parts
+    if (
+        relative.is_absolute()
+        or not parts
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        raise UnsafePathComponent(f"unsafe relative artifact path: {relative_path}")
+
+    root_path_stat = root.lstat()
+    if stat.S_ISLNK(root_path_stat.st_mode) or not stat.S_ISDIR(
+        root_path_stat.st_mode
+    ):
+        raise UnsafePathComponent(f"unsafe package root: {root}")
+
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    file_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    directory_fds = []
+    directory_records = []
+    descriptor = None
+    try:
+        root_fd = os.open(root, directory_flags)
+        directory_fds.append(root_fd)
+        root_opened_stat = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_opened_stat.st_mode):
+            raise UnsafePathComponent(f"unsafe package root: {root}")
+        if (root_path_stat.st_dev, root_path_stat.st_ino) != (
+            root_opened_stat.st_dev,
+            root_opened_stat.st_ino,
+        ):
+            raise UnstableFile(f"package root changed before open: {root}")
+
+        current_fd = root_fd
+        for part in parts[:-1]:
+            component_stat = os.stat(
+                part,
+                dir_fd=current_fd,
+                follow_symlinks=False,
+            )
+            if stat.S_ISLNK(component_stat.st_mode) or not stat.S_ISDIR(
+                component_stat.st_mode
+            ):
+                raise UnsafePathComponent(f"unsafe artifact path component: {part}")
+            component_fd = os.open(part, directory_flags, dir_fd=current_fd)
+            component_opened_stat = os.fstat(component_fd)
+            if not stat.S_ISDIR(component_opened_stat.st_mode):
+                os.close(component_fd)
+                raise UnsafePathComponent(f"unsafe artifact path component: {part}")
+            if (component_stat.st_dev, component_stat.st_ino) != (
+                component_opened_stat.st_dev,
+                component_opened_stat.st_ino,
+            ):
+                os.close(component_fd)
+                raise UnstableFile(
+                    f"artifact path component changed before open: {part}"
+                )
+            directory_records.append((current_fd, part, component_opened_stat))
+            directory_fds.append(component_fd)
+            current_fd = component_fd
+
+        file_name = parts[-1]
+        path_stat = os.stat(
+            file_name,
+            dir_fd=current_fd,
+            follow_symlinks=False,
+        )
+        if not stat.S_ISREG(path_stat.st_mode):
+            raise NonRegularFile(f"not a regular file: {relative_path}")
+        descriptor = os.open(file_name, file_flags, dir_fd=current_fd)
+        opened_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(opened_stat.st_mode):
+            raise NonRegularFile(f"not a regular file: {relative_path}")
+        if stable_file_metadata(path_stat) != stable_file_metadata(opened_stat):
+            raise UnstableFile(f"file changed before open: {relative_path}")
+
+        stream = os.fdopen(descriptor, "rb", closefd=True)
+        descriptor = None
+        with stream:
+            artifact_sha256 = sha256_stream(stream)
+            final_stat = os.fstat(stream.fileno())
+        if stable_file_metadata(opened_stat) != stable_file_metadata(final_stat):
+            raise UnstableFile(f"file changed while hashing: {relative_path}")
+
+        final_path_stat = os.stat(
+            file_name,
+            dir_fd=current_fd,
+            follow_symlinks=False,
+        )
+        if not stat.S_ISREG(final_path_stat.st_mode):
+            raise NonRegularFile(f"not a regular file after hashing: {relative_path}")
+        if stable_file_metadata(final_stat) != stable_file_metadata(
+            final_path_stat
+        ):
+            raise UnstableFile(f"file path changed while hashing: {relative_path}")
+
+        for parent_fd, part, component_opened_stat in reversed(directory_records):
+            current_component_stat = os.stat(
+                part,
+                dir_fd=parent_fd,
+                follow_symlinks=False,
+            )
+            if stat.S_ISLNK(current_component_stat.st_mode) or not stat.S_ISDIR(
+                current_component_stat.st_mode
+            ):
+                raise UnsafePathComponent(
+                    f"artifact path component changed while hashing: {part}"
+                )
+            if (current_component_stat.st_dev, current_component_stat.st_ino) != (
+                component_opened_stat.st_dev,
+                component_opened_stat.st_ino,
+            ):
+                raise UnstableFile(
+                    f"artifact path component changed while hashing: {part}"
+                )
+
+        final_root_stat = root.lstat()
+        if stat.S_ISLNK(final_root_stat.st_mode) or not stat.S_ISDIR(
+            final_root_stat.st_mode
+        ):
+            raise UnsafePathComponent(f"package root changed while hashing: {root}")
+        if (final_root_stat.st_dev, final_root_stat.st_ino) != (
+            root_opened_stat.st_dev,
+            root_opened_stat.st_ino,
+        ):
+            raise UnstableFile(f"package root changed while hashing: {root}")
+        return final_stat, artifact_sha256
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        for directory_fd in reversed(directory_fds):
+            os.close(directory_fd)
+
+
 def safe_directory_chain(root, relative_path):
     current = Path(root)
     root_stat = current.lstat()
@@ -764,7 +913,9 @@ def integrity_report(installed_root, strict):
         source_path = ROOT / relative_path
         try:
             safe_directory_chain(ROOT, relative_path)
-            source_stat, source_sha256 = regular_file_identity_and_sha256(source_path)
+            source_stat, source_sha256 = regular_file_identity_and_sha256_at(
+                ROOT, relative_path
+            )
         except FileNotFoundError:
             source_missing.append(relative_path)
             continue
@@ -791,8 +942,8 @@ def integrity_report(installed_root, strict):
             pass
         try:
             safe_directory_chain(installed_root, relative_path)
-            installed_stat, installed_sha256 = regular_file_identity_and_sha256(
-                installed_path
+            installed_stat, installed_sha256 = regular_file_identity_and_sha256_at(
+                installed_root, relative_path
             )
         except FileNotFoundError:
             missing.append(relative_path)
@@ -1480,9 +1631,10 @@ def public_repair_target_is_proven(
         if package_root.resolve() == ROOT.resolve():
             return False
 
-        source_path = ROOT / relative_path
         safe_directory_chain(ROOT, relative_path)
-        source_stat, source_sha256 = regular_file_identity_and_sha256(source_path)
+        source_stat, source_sha256 = regular_file_identity_and_sha256_at(
+            ROOT, relative_path
+        )
         if source_sha256 != expected_sha256:
             return False
 
@@ -1495,7 +1647,9 @@ def public_repair_target_is_proven(
                 return True
             return False
 
-        target_stat, target_sha256 = regular_file_identity_and_sha256(target_path)
+        target_stat, target_sha256 = regular_file_identity_and_sha256_at(
+            package_root, relative_path
+        )
         if (target_stat.st_dev, target_stat.st_ino) == (
             source_stat.st_dev,
             source_stat.st_ino,
