@@ -6,7 +6,9 @@
 - add deterministic `repair-plan --dry-run` output with no apply mode, one action per finding, unknown findings blocked by default, and strict CI semantics;
 - keep both commands read-only: no capability execution, private index discovery, home/cache scan, recovery drill, network call, or write operation;
 - make strict doctor require an explicitly named independent installed copy while non-strict doctor remains diagnostic;
-- reject symlinks to independent equal-byte artifacts by using `lstat`, `O_NOFOLLOW`, stable file identity, and pre/post hash metadata checks;
+- reject symlinked installed/plugin roots, nested directory symlinks, and symlinks to independent equal-byte artifacts; re-lstat the named path after hashing and verify identity, size, mtime, and ctime stability;
+- treat failed `verified-working` evidence and malformed/empty index or route fixtures as non-healthy fail-closed findings without tracebacks;
+- require repair advice to recompute the trusted canonical artifact hash and verify the explicit installed root plus exact target state;
 - execute and assert doctor/repair safety contracts in source-install and extracted-release CI paths.
 
 ## v0.2.0-public - 2026-07-11

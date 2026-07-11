@@ -36,7 +36,7 @@ scripts/build-release-snapshot.sh --ref HEAD --output-dir /tmp/momo-tools-public
 plugin/scripts/momo-tools --index plugin/capabilities.example.yaml validate
 ```
 
-CI smoke-tests a temporary installed binary, runs the strict trust comparison, doctor, and dry-run repair contracts, and builds the exact commit twice to prove byte-reproducible release outputs. The extracted snapshot repeats those checks. Contract tests cover no-follow artifact inspection, independent symlink rejection, non-blocking FIFO handling, stable identity across hashing, deterministic finding/action mapping, version consistency, release snapshot provenance, and a tracked-file private-context scan that neither echoes matched content nor treats a `git grep` error as clean.
+CI smoke-tests a temporary installed binary, runs the strict trust comparison, doctor, and dry-run repair contracts, and builds the exact commit twice to prove byte-reproducible release outputs. The extracted snapshot repeats those checks. Contract tests cover no-follow artifact inspection, root/nested/final symlink rejection, non-blocking FIFO handling, post-hash pathname and metadata stability, failed-evidence handling, malformed/empty fixture rejection, canonical repair proof, deterministic finding/action mapping, version consistency, release snapshot provenance, and a tracked-file private-context scan that neither echoes matched content nor treats a `git grep` error as clean.
 
 ## Known Limits
 

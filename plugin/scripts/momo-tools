@@ -220,6 +220,9 @@ def validation_errors(capabilities):
     errors = []
     names = Counter()
     for idx, cap in enumerate(capabilities):
+        if not isinstance(cap, dict):
+            errors.append(f"<row {idx}>: capability must be an object")
+            continue
         name = cap.get("name", f"<row {idx}>")
         names[name] += 1
         missing = sorted(REQUIRED_FIELDS - set(cap))
@@ -344,6 +347,18 @@ def cmd_validate(args):
 def cmd_dashboard(args):
     capabilities = load_index(args.index)
     errors = validation_errors(capabilities)
+    if errors:
+        print_json(
+            {
+                "read_only": True,
+                "capability_count": len(capabilities),
+                "verification_levels": {},
+                "risks": {},
+                "validation_errors": len(errors),
+                "errors": errors,
+            }
+        )
+        return 1
     levels = Counter(cap.get("verification_level", "missing") for cap in capabilities)
     risks = Counter(risk for cap in capabilities for risk in cap.get("risk", []))
     print_json(
@@ -376,11 +391,35 @@ def cmd_route(args):
 
 def load_cases(path: Path):
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        cases = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise SystemExit(f"cases not found: {path}")
     except json.JSONDecodeError as exc:
         raise SystemExit(f"invalid route cases {path}: {exc}")
+    if not isinstance(cases, list) or not cases:
+        raise SystemExit(f"route cases must be a non-empty array: {path}")
+    seen_ids = set()
+    for index_number, case in enumerate(cases, 1):
+        if not isinstance(case, dict):
+            raise SystemExit(f"route case {index_number} must be an object: {path}")
+        case_id = case.get("id")
+        prompt = case.get("prompt")
+        if not isinstance(case_id, str) or not case_id.strip():
+            raise SystemExit(f"route case {index_number} has an invalid id: {path}")
+        if case_id in seen_ids:
+            raise SystemExit(f"duplicate route case id {case_id!r}: {path}")
+        seen_ids.add(case_id)
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise SystemExit(f"route case {case_id!r} has an invalid prompt: {path}")
+        for field in ("expected", "forbidden", "must_gate"):
+            value = case.get(field, [])
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) for item in value
+            ):
+                raise SystemExit(
+                    f"route case {case_id!r} field {field} must be a string array: {path}"
+                )
+    return cases
 
 
 def evaluate_cases(capabilities, cases):
@@ -528,6 +567,9 @@ def assess_evidence(records, as_of):
             assessed.append(result)
             continue
 
+        if record.get("status") != "passed":
+            result["errors"].append("verified-working status must be passed")
+
         missing = sorted(VERIFIED_WORKING_FRESHNESS_FIELDS - set(record))
         if missing:
             result["errors"].append(f"missing fields {', '.join(missing)}")
@@ -615,6 +657,20 @@ class UnstableFile(OSError):
     pass
 
 
+class UnsafePathComponent(OSError):
+    pass
+
+
+def stable_file_metadata(file_stat):
+    return (
+        file_stat.st_dev,
+        file_stat.st_ino,
+        file_stat.st_size,
+        file_stat.st_mtime_ns,
+        file_stat.st_ctime_ns,
+    )
+
+
 def regular_file_identity_and_sha256(path):
     path = Path(path)
     path_stat = path.lstat()
@@ -633,44 +689,67 @@ def regular_file_identity_and_sha256(path):
         opened_stat = os.fstat(descriptor)
         if not stat.S_ISREG(opened_stat.st_mode):
             raise NonRegularFile(f"not a regular file: {path}")
-        if (path_stat.st_dev, path_stat.st_ino) != (
-            opened_stat.st_dev,
-            opened_stat.st_ino,
-        ):
-            raise UnstableFile(f"file identity changed before open: {path}")
+        if stable_file_metadata(path_stat) != stable_file_metadata(opened_stat):
+            raise UnstableFile(f"file changed before open: {path}")
         stream = os.fdopen(descriptor, "rb", closefd=True)
         descriptor = None
         with stream:
             artifact_sha256 = sha256_stream(stream)
             final_stat = os.fstat(stream.fileno())
-        if (
-            opened_stat.st_dev,
-            opened_stat.st_ino,
-            opened_stat.st_size,
-            opened_stat.st_mtime_ns,
-        ) != (
-            final_stat.st_dev,
-            final_stat.st_ino,
-            final_stat.st_size,
-            final_stat.st_mtime_ns,
-        ):
+        if stable_file_metadata(opened_stat) != stable_file_metadata(final_stat):
             raise UnstableFile(f"file changed while hashing: {path}")
+        final_path_stat = path.lstat()
+        if not stat.S_ISREG(final_path_stat.st_mode):
+            raise NonRegularFile(f"not a regular file after hashing: {path}")
+        if stable_file_metadata(final_stat) != stable_file_metadata(final_path_stat):
+            raise UnstableFile(f"file path changed while hashing: {path}")
         return final_stat, artifact_sha256
     finally:
         if descriptor is not None:
             os.close(descriptor)
 
 
+def safe_directory_chain(root, relative_path):
+    current = Path(root)
+    root_stat = current.lstat()
+    if stat.S_ISLNK(root_stat.st_mode) or not stat.S_ISDIR(root_stat.st_mode):
+        raise UnsafePathComponent(f"unsafe package root: {current}")
+    for part in Path(relative_path).parts[:-1]:
+        current = current / part
+        component_stat = current.lstat()
+        if stat.S_ISLNK(component_stat.st_mode) or not stat.S_ISDIR(
+            component_stat.st_mode
+        ):
+            raise UnsafePathComponent(f"unsafe artifact path component: {current}")
+
+
 def installed_package_root(installed_root):
     if installed_root is None:
-        return None
+        return None, []
+    installed_root = Path(installed_root)
+    try:
+        root_stat = installed_root.lstat()
+    except FileNotFoundError:
+        return None, ["installed_root_missing"]
+    if stat.S_ISLNK(root_stat.st_mode):
+        return None, ["installed_root_is_symlink"]
+    if not stat.S_ISDIR(root_stat.st_mode):
+        return None, ["installed_root_not_directory"]
     plugin_root = installed_root / "plugin"
-    return plugin_root if plugin_root.exists() else installed_root
+    try:
+        plugin_stat = plugin_root.lstat()
+    except FileNotFoundError:
+        return installed_root, []
+    if stat.S_ISLNK(plugin_stat.st_mode):
+        return None, ["installed_plugin_root_is_symlink"]
+    if not stat.S_ISDIR(plugin_stat.st_mode):
+        return None, ["installed_plugin_root_not_directory"]
+    return plugin_root, []
 
 
 def integrity_report(installed_root, strict):
     installed_root_supplied = installed_root is not None
-    installed_root = installed_package_root(installed_root)
+    installed_root, root_errors = installed_package_root(installed_root)
     manifest = []
     source_missing = []
     source_read_errors = []
@@ -678,12 +757,13 @@ def integrity_report(installed_root, strict):
     mismatched = []
     source_aliases = []
     installed_read_errors = []
-    errors = []
+    errors = list(root_errors)
     installed_matches = None
 
     for relative_path in PUBLIC_PACKAGE_ARTIFACTS:
         source_path = ROOT / relative_path
         try:
+            safe_directory_chain(ROOT, relative_path)
             source_stat, source_sha256 = regular_file_identity_and_sha256(source_path)
         except FileNotFoundError:
             source_missing.append(relative_path)
@@ -710,6 +790,7 @@ def integrity_report(installed_root, strict):
         except OSError:
             pass
         try:
+            safe_directory_chain(installed_root, relative_path)
             installed_stat, installed_sha256 = regular_file_identity_and_sha256(
                 installed_path
             )
@@ -748,7 +829,7 @@ def integrity_report(installed_root, strict):
 
     if strict and not installed_root_supplied:
         errors.append("installed_root_required")
-    elif strict and installed_root.resolve() == ROOT.resolve():
+    elif strict and installed_root is not None and installed_root.resolve() == ROOT.resolve():
         errors.append("installed_root_is_canonical_source")
     elif strict and source_aliases:
         errors.append("installed_artifacts_are_canonical_source_aliases")
@@ -763,7 +844,7 @@ def integrity_report(installed_root, strict):
             errors,
         )
     )
-    if not strict and installed_root is None:
+    if not strict and not installed_root_supplied:
         ok = not source_missing and not source_read_errors
     return {
         "ok": ok,
@@ -959,7 +1040,16 @@ def build_doctor_report(
                     {"errors": errors},
                 )
             )
-    except (SystemExit, OSError, ValueError, json.JSONDecodeError) as exc:
+            capabilities = None
+    except (
+        SystemExit,
+        OSError,
+        ValueError,
+        TypeError,
+        AttributeError,
+        KeyError,
+        json.JSONDecodeError,
+    ) as exc:
         checks["index_validation"] = {
             "health_status": "failed",
             "error_count": 1,
@@ -1044,7 +1134,15 @@ def build_doctor_report(
                         "fix-routing-source-and-tests",
                     )
                 )
-        except (SystemExit, OSError, ValueError, json.JSONDecodeError) as exc:
+        except (
+            SystemExit,
+            OSError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            KeyError,
+            json.JSONDecodeError,
+        ) as exc:
             checks["routing_regression"] = {
                 "health_status": "failed",
                 "audit": {"case_count": 0, "fail_count": 0},
@@ -1152,7 +1250,7 @@ def build_doctor_report(
                 "source-unstable"
                 if item["error"] == "UnstableFile"
                 else "source-unsafe"
-                if item["error"] == "NonRegularFile"
+                if item["error"] in {"NonRegularFile", "UnsafePathComponent"}
                 else "source-read-error"
             )
             findings.append(
@@ -1205,7 +1303,7 @@ def build_doctor_report(
                 "installed-unstable"
                 if item["error"] == "UnstableFile"
                 else "installed-unsafe"
-                if item["error"] == "NonRegularFile"
+                if item["error"] in {"NonRegularFile", "UnsafePathComponent"}
                 else "installed-read-error"
             )
             findings.append(
@@ -1220,6 +1318,11 @@ def build_doctor_report(
         error_categories = {
             "installed_root_required": "installed-root-required",
             "installed_root_is_canonical_source": "installed-root-alias",
+            "installed_root_missing": "installed-root-unsafe",
+            "installed_root_is_symlink": "installed-root-unsafe",
+            "installed_root_not_directory": "installed-root-unsafe",
+            "installed_plugin_root_is_symlink": "installed-root-unsafe",
+            "installed_plugin_root_not_directory": "installed-root-unsafe",
         }
         for error in integrity["errors"]:
             category = error_categories.get(error)
@@ -1354,6 +1457,55 @@ def doctor_source_inconsistencies(report):
     return errors
 
 
+def public_repair_target_is_proven(
+    doctor_report,
+    category,
+    relative_path,
+    expected_sha256,
+):
+    if relative_path not in PUBLIC_PACKAGE_ARTIFACTS:
+        return False
+    if not isinstance(expected_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_sha256
+    ):
+        return False
+    explicit_root = doctor_report.get("installed_root")
+    if not isinstance(explicit_root, str) or not explicit_root.strip():
+        return False
+
+    try:
+        package_root, root_errors = installed_package_root(Path(explicit_root))
+        if root_errors or package_root is None:
+            return False
+        if package_root.resolve() == ROOT.resolve():
+            return False
+
+        source_path = ROOT / relative_path
+        safe_directory_chain(ROOT, relative_path)
+        source_stat, source_sha256 = regular_file_identity_and_sha256(source_path)
+        if source_sha256 != expected_sha256:
+            return False
+
+        target_path = package_root / relative_path
+        safe_directory_chain(package_root, relative_path)
+        if category == "installed-missing":
+            try:
+                target_path.lstat()
+            except FileNotFoundError:
+                return True
+            return False
+
+        target_stat, target_sha256 = regular_file_identity_and_sha256(target_path)
+        if (target_stat.st_dev, target_stat.st_ino) == (
+            source_stat.st_dev,
+            source_stat.st_ino,
+        ):
+            return False
+        return target_sha256 != source_sha256
+    except OSError:
+        return False
+
+
 def build_repair_plan(doctor_report, *, dry_run=False):
     if not dry_run:
         raise ValueError("repair-plan requires --dry-run; apply mode is not implemented")
@@ -1374,12 +1526,6 @@ def build_repair_plan(doctor_report, *, dry_run=False):
     else:
         source_health_status = doctor_report["health_status"]
         findings = list(doctor_report["findings"])
-    explicit_installed_root = (
-        doctor_report.get("installed_root")
-        if isinstance(doctor_report, dict)
-        else None
-    )
-
     findings.sort(
         key=lambda item: (
             0 if item.get("severity") == "failed" else 1,
@@ -1439,12 +1585,11 @@ def build_repair_plan(doctor_report, *, dry_run=False):
         elif category in {"installed-missing", "installed-mismatch"}:
             relative_path = str(details.get("path") or "")
             expected_sha256 = details.get("expected_sha256")
-            if (
-                relative_path in PUBLIC_PACKAGE_ARTIFACTS
-                and isinstance(expected_sha256, str)
-                and re.fullmatch(r"[0-9a-f]{64}", expected_sha256)
-                and isinstance(explicit_installed_root, str)
-                and bool(explicit_installed_root.strip())
+            if public_repair_target_is_proven(
+                doctor_report,
+                category,
+                relative_path,
+                expected_sha256,
             ):
                 action_type = "advisory-reinstall-from-verified-release"
                 target = relative_path
@@ -1483,7 +1628,11 @@ def build_repair_plan(doctor_report, *, dry_run=False):
                 "Do not copy through or replace this target while its type, identity, or "
                 "read stability is unsafe."
             )
-        elif category in {"installed-root-required", "installed-root-alias"}:
+        elif category in {
+            "installed-root-required",
+            "installed-root-alias",
+            "installed-root-unsafe",
+        }:
             action_type = "blocked-installed-root-review"
             procedure = (
                 "Select an explicit independent installed-copy root before requesting a "

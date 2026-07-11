@@ -157,6 +157,50 @@ class PublicDoctorCliTests(unittest.TestCase):
             {finding["category"] for finding in report["findings"]},
         )
 
+    def test_malformed_index_rows_fail_closed_without_traceback(self):
+        install_root = self.installed_copy()
+        malformed_index = self.temporary_file("malformed-index.json", "[null]\n")
+        commands = (
+            (
+                "doctor",
+                "--as-of",
+                AS_OF,
+                "--installed-root",
+                str(install_root),
+                "--json",
+                "--strict",
+            ),
+            (
+                "repair-plan",
+                "--dry-run",
+                "--as-of",
+                AS_OF,
+                "--installed-root",
+                str(install_root),
+                "--json",
+                "--strict",
+            ),
+        )
+        for command in commands:
+            with self.subTest(command=command[0]):
+                result = self.run_cli(
+                    "--index",
+                    str(malformed_index),
+                    *command,
+                )
+                self.assertEqual(1, result.returncode, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                report = json.loads(result.stdout)
+                if command[0] == "doctor":
+                    self.assertEqual("failed", report["health_status"])
+                    self.assertIn(
+                        "probe-error",
+                        {finding["category"] for finding in report["findings"]},
+                    )
+                else:
+                    self.assertEqual("failed", report["source_health_status"])
+                    self.assertGreater(report["action_count"], 0)
+
     def test_expired_evidence_degrades_doctor_without_extending_timestamp(self):
         install_root = self.installed_copy()
         evidence = self.temporary_file(
@@ -199,6 +243,80 @@ class PublicDoctorCliTests(unittest.TestCase):
             "expired",
             report["findings"][0]["details"]["freshness"],
         )
+
+    def test_failed_verified_working_evidence_cannot_be_healthy_or_no_op(self):
+        install_root = self.installed_copy()
+        evidence = self.temporary_file(
+            "failed-status.jsonl",
+            json.dumps(
+                {
+                    "capability": "failed-check",
+                    "level": "verified-working",
+                    "status": "failed",
+                    "checked_at": "2026-07-10T10:00:00+00:00",
+                    "valid_until": "2026-07-10T13:00:00+00:00",
+                    "command": "synthetic failing fixture",
+                    "evidence_ref": "synthetic://failed",
+                    "risk_boundary": "synthetic only",
+                }
+            )
+            + "\n",
+        )
+        common = (
+            "--as-of",
+            AS_OF,
+            "--evidence",
+            str(evidence),
+            "--installed-root",
+            str(install_root),
+            "--json",
+            "--strict",
+        )
+
+        doctor = self.run_cli("doctor", *common)
+        repair = self.run_cli("repair-plan", "--dry-run", *common)
+
+        self.assertEqual(1, doctor.returncode, doctor.stderr)
+        doctor_report = json.loads(doctor.stdout)
+        self.assertEqual("degraded", doctor_report["health_status"])
+        self.assertIn(
+            "invalid-evidence",
+            {finding["category"] for finding in doctor_report["findings"]},
+        )
+        self.assertEqual(1, repair.returncode, repair.stderr)
+        repair_report = json.loads(repair.stdout)
+        self.assertNotEqual("no-op", repair_report["plan_status"])
+        self.assertGreater(repair_report["action_count"], 0)
+
+    def test_empty_or_malformed_route_case_collections_fail_closed(self):
+        install_root = self.installed_copy()
+        fixtures = (
+            self.temporary_file("empty-cases.json", "[]\n"),
+            self.temporary_file("object-cases.json", "{}\n"),
+            self.temporary_file("null-row-cases.json", "[null]\n"),
+        )
+        for fixture in fixtures:
+            for option in ("--cases", "--benchmark-cases"):
+                with self.subTest(fixture=fixture.name, option=option):
+                    result = self.run_cli(
+                        "doctor",
+                        "--as-of",
+                        AS_OF,
+                        "--installed-root",
+                        str(install_root),
+                        option,
+                        str(fixture),
+                        "--json",
+                        "--strict",
+                    )
+                    self.assertEqual(1, result.returncode, result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    report = json.loads(result.stdout)
+                    self.assertEqual("failed", report["health_status"])
+                    self.assertIn(
+                        "probe-error",
+                        {finding["category"] for finding in report["findings"]},
+                    )
 
     def test_doctor_fails_closed_for_missing_probe_input_without_traceback(self):
         install_root = self.installed_copy()
@@ -465,6 +583,30 @@ class PublicRepairPlanTests(unittest.TestCase):
             },
         )
         source = self.doctor_report([finding], health_status="failed", installed_root=None)
+
+        report = self.cli.build_repair_plan(source, dry_run=True)
+
+        self.assertEqual("blocked", report["plan_status"])
+        self.assertEqual("blocked-canonical-unproven", report["actions"][0]["action_type"])
+
+    def test_forged_canonical_hash_is_blocked_even_with_existing_installed_root(self):
+        install_root = self.installed_copy()
+        target = install_root / "plugin" / "capabilities.example.json"
+        target.write_text('{"corrupted": true}\n', encoding="utf-8")
+        finding = self.finding(
+            "doctor-001",
+            "installed-mismatch",
+            subject="capabilities.example.json",
+            details={
+                "path": "capabilities.example.json",
+                "expected_sha256": "a" * 64,
+            },
+        )
+        source = self.doctor_report(
+            [finding],
+            health_status="failed",
+            installed_root=str(install_root),
+        )
 
         report = self.cli.build_repair_plan(source, dry_run=True)
 

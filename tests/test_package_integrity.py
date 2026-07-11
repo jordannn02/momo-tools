@@ -183,6 +183,61 @@ class PublicTrustLifecycleCliTests(unittest.TestCase):
         )
         self.assertIn("installed_artifact_read_error", report["errors"])
 
+    def test_strict_integrity_rejects_symlinked_installed_root_and_plugin_root(self):
+        install_root = self.installed_copy()
+        root_alias = install_root.parent / "installed-root-alias"
+        root_alias.symlink_to(install_root, target_is_directory=True)
+
+        root_result = self.run_cli(
+            "integrity",
+            "--installed-root",
+            str(root_alias),
+            "--strict",
+        )
+
+        self.assertEqual(1, root_result.returncode, root_result.stderr)
+        root_report = json.loads(root_result.stdout)
+        self.assertFalse(root_report["ok"])
+        self.assertIn("installed_root_is_symlink", root_report["errors"])
+
+        plugin_container = install_root.parent / "plugin-root-container"
+        plugin_container.mkdir()
+        (plugin_container / "plugin").symlink_to(
+            install_root / "plugin",
+            target_is_directory=True,
+        )
+        plugin_result = self.run_cli(
+            "integrity",
+            "--installed-root",
+            str(plugin_container),
+            "--strict",
+        )
+
+        self.assertEqual(1, plugin_result.returncode, plugin_result.stderr)
+        plugin_report = json.loads(plugin_result.stdout)
+        self.assertFalse(plugin_report["ok"])
+        self.assertIn("installed_plugin_root_is_symlink", plugin_report["errors"])
+
+        nested_root = self.installed_copy()
+        scripts_path = nested_root / "plugin" / "scripts"
+        real_scripts = nested_root / "plugin" / "real-scripts"
+        scripts_path.rename(real_scripts)
+        scripts_path.symlink_to(real_scripts, target_is_directory=True)
+        nested_result = self.run_cli(
+            "integrity",
+            "--installed-root",
+            str(nested_root),
+            "--strict",
+        )
+
+        self.assertEqual(1, nested_result.returncode, nested_result.stderr)
+        nested_report = json.loads(nested_result.stdout)
+        self.assertFalse(nested_report["ok"])
+        self.assertIn(
+            {"path": "scripts/momo-tools", "error": "UnsafePathComponent"},
+            nested_report["installed_read_errors"],
+        )
+
     def test_artifact_hash_rejects_file_changed_during_read(self):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -199,6 +254,29 @@ class PublicTrustLifecycleCliTests(unittest.TestCase):
             self.cli,
             "sha256_stream",
             side_effect=mutate_after_hash,
+        ):
+            with self.assertRaises(self.cli.UnstableFile):
+                self.cli.regular_file_identity_and_sha256(path)
+
+    def test_artifact_hash_rejects_atomic_path_replacement(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        root = Path(temp_dir.name)
+        path = root / "artifact"
+        replacement = root / "replacement"
+        path.write_bytes(b"trusted-before-hash\n")
+        replacement.write_bytes(b"replaced-after-hash\n")
+        original_sha256_stream = self.cli.sha256_stream
+
+        def replace_path_after_hash(stream):
+            digest = original_sha256_stream(stream)
+            replacement.replace(path)
+            return digest
+
+        with mock.patch.object(
+            self.cli,
+            "sha256_stream",
+            side_effect=replace_path_after_hash,
         ):
             with self.assertRaises(self.cli.UnstableFile):
                 self.cli.regular_file_identity_and_sha256(path)
