@@ -11,9 +11,10 @@ MoMo_tools uses dependency-free smoke tests so the public repository can run in 
 | `evidence` | JSONL verification evidence shape in `evidence/example-verification.jsonl`. |
 | `freshness --strict` | Requires valid, timezone-aware, unexpired `verified-working` evidence at `--as-of`. |
 | `pressure` | Conflict prompts keep risk gates visible and block unsafe persistence. |
-| source `integrity --installed-root PATH --strict` | SHA-256 comparison of a small fixed public manifest against an independent installed copy; strict mode rejects an omitted root or the canonical source tree. |
+| source `integrity --installed-root PATH --strict` | SHA-256 comparison of a fixed public manifest against an independent installed copy; strict mode rejects omitted/canonical roots, per-artifact aliases, non-regular files, and artifact read failures. |
 | source `recovery-drill --strict` | Temporary-only corruption and restore proof with canonical source bytes unchanged. |
 | source `slo --installed-root PATH --strict` | One public release-health result covering P1 freshness and P2 integrity/recovery alongside routing checks; strict mode rejects an omitted root or the canonical source tree. |
+| `scripts/build-release-snapshot.sh --ref REF` | Builds a committed Git ref reproducibly and emits archive, checksum, and exact-commit manifest evidence. |
 | `test` | Validation, audit, benchmark, and pressure in one command. |
 
 Run everything locally:
@@ -27,10 +28,11 @@ MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
 plugin/scripts/momo-tools integrity --installed-root /tmp/momo-tools-public-install-test --strict
 plugin/scripts/momo-tools recovery-drill --strict
 plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
+scripts/build-release-snapshot.sh --ref HEAD --output-dir /tmp/momo-tools-public-release
 plugin/scripts/momo-tools --index plugin/capabilities.example.yaml validate
 ```
 
-CI smoke-tests a temporary installed binary, then runs the strict P1/P2 comparison commands from the source checkout against that temporary install, alongside syntax, unit tests, and a private-context leak scan.
+CI smoke-tests a temporary installed binary, runs the strict P1/P2 comparison commands, and builds the exact commit twice to prove byte-reproducible release outputs. Contract tests cover descriptor-based alias detection, non-blocking FIFO rejection, stable JSON read/type-error reporting, version consistency, release snapshot provenance, and a tracked-file private-context scan that neither echoes matched content nor treats a `git grep` error as clean.
 
 ## Known Limits
 

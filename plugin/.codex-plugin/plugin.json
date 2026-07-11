@@ -1,6 +1,6 @@
 {
   "name": "momo-tools",
-  "version": "0.1.0-public",
+  "version": "0.2.0-public",
   "description": "Local-first capability router and safety gate for AI agent tools.",
   "author": {
     "name": "MoMo_tools contributors"
@@ -25,4 +25,3 @@
     "defaultPrompt": "Use MoMo_tools to inspect the capability index and route this task safely."
   }
 }
-

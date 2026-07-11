@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
 
       - name: Make scripts executable
-        run: chmod +x plugin/scripts/momo-tools scripts/install-local.sh
+        run: chmod +x plugin/scripts/momo-tools scripts/install-local.sh scripts/build-release-snapshot.sh
 
       - name: Check Python and JSON syntax
         run: |
@@ -33,6 +33,18 @@ jobs:
           test -f demo/index.html
           test -f demo/app.js
           test -f demo/styles.css
+
+      - name: Private-context leak scan
+        run: |
+          set +e
+          git grep -qE 'PRIVATE_[C]OMPANY|PRIVATE_[C]USTOMER|PRIVATE_[H]OST|PRIVATE_[D]ATABASE|PRIVATE_[S]ECRET_LABEL|/[U]sers/' -- .
+          scan_rc=$?
+          set -e
+          case "$scan_rc" in
+            0) exit 1 ;;
+            1) ;;
+            *) exit "$scan_rc" ;;
+          esac
 
       - name: Run public unit tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
@@ -60,8 +72,48 @@ jobs:
           plugin/scripts/momo-tools recovery-drill --strict
           plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root "$tmp" --strict
 
-      - name: Private-context leak scan
+      - name: Build reproducible release snapshot
         run: |
-          if grep -RInE --exclude='ci.yml' 'PRIVATE_COMPANY|PRIVATE_CUSTOMER|PRIVATE_HOST|PRIVATE_DATABASE|PRIVATE_SECRET_LABEL|/Users/' .; then
-            exit 1
-          fi
+          version=$(tr -d '\r\n' < VERSION)
+          scripts/build-release-snapshot.sh --ref "$GITHUB_SHA" --output-dir dist/release-first
+          scripts/build-release-snapshot.sh --ref "$GITHUB_SHA" --output-dir dist/release-second
+          first_archive="dist/release-first/momo-tools-v${version}.tar.gz"
+          second_archive="dist/release-second/momo-tools-v${version}.tar.gz"
+          cmp "$first_archive" "$second_archive"
+          cmp "${first_archive}.sha256" "${second_archive}.sha256"
+          cmp "dist/release-first/momo-tools-v${version}.snapshot.json" "dist/release-second/momo-tools-v${version}.snapshot.json"
+          mkdir -p dist/release
+          cp dist/release-first/* dist/release/
+
+      - name: Smoke-test release snapshot artifact
+        run: |
+          version=$(tr -d '\r\n' < VERSION)
+          first_archive="dist/release-first/momo-tools-v${version}.tar.gz"
+          snapshot_manifest="dist/release-first/momo-tools-v${version}.snapshot.json"
+          (cd dist/release-first && sha256sum -c "momo-tools-v${version}.tar.gz.sha256")
+          python - "$snapshot_manifest" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          report = json.load(open(sys.argv[1], encoding="utf-8"))
+          if report["commit_sha"] != sys.argv[2]:
+              raise SystemExit("snapshot manifest commit does not match GITHUB_SHA")
+          PY
+          snapshot_extract=$(mktemp -d)
+          installed_root=$(mktemp -d)
+          trap 'rm -rf "$snapshot_extract" "$installed_root"' EXIT
+          tar -xzf "$first_archive" -C "$snapshot_extract"
+          snapshot_root="$snapshot_extract/momo-tools-v${version}"
+          MOMO_TOOLS_HOME="$installed_root" "$snapshot_root/scripts/install-local.sh"
+          "$installed_root/bin/momo-tools" test
+          "$snapshot_root/plugin/scripts/momo-tools" integrity --installed-root "$installed_root" --strict
+          "$snapshot_root/plugin/scripts/momo-tools" recovery-drill --strict
+          "$snapshot_root/plugin/scripts/momo-tools" slo --as-of 2026-07-10T12:00:00+00:00 --installed-root "$installed_root" --strict
+
+      - name: Upload release snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: momo-tools-release-snapshot-${{ github.sha }}
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 14

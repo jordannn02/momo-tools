@@ -2,7 +2,9 @@
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import sys
 import tempfile
 from collections import Counter
@@ -596,6 +598,37 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def sha256_stream(stream):
+    digest = hashlib.sha256()
+    while True:
+        chunk = stream.read(1024 * 1024)
+        if not chunk:
+            return digest.hexdigest()
+        digest.update(chunk)
+
+
+class NonRegularFile(OSError):
+    pass
+
+
+def regular_file_identity_and_sha256(path):
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0)
+    descriptor = None
+    try:
+        descriptor = os.open(path, flags)
+        artifact_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(artifact_stat.st_mode):
+            raise NonRegularFile(f"not a regular file: {path}")
+        stream = os.fdopen(descriptor, "rb", closefd=True)
+        descriptor = None
+        with stream:
+            artifact_sha256 = sha256_stream(stream)
+        return artifact_stat, artifact_sha256
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def installed_package_root(installed_root):
     if installed_root is None:
         return None
@@ -604,38 +637,92 @@ def installed_package_root(installed_root):
 
 
 def integrity_report(installed_root, strict):
-    manifest = []
-    source_missing = []
-    for relative_path in PUBLIC_PACKAGE_ARTIFACTS:
-        source_path = ROOT / relative_path
-        if not source_path.is_file():
-            source_missing.append(relative_path)
-            continue
-        manifest.append({"path": relative_path, "sha256": sha256_bytes(source_path.read_bytes())})
-
     installed_root_supplied = installed_root is not None
     installed_root = installed_package_root(installed_root)
+    manifest = []
+    source_missing = []
+    source_read_errors = []
     missing = []
     mismatched = []
+    source_aliases = []
+    installed_read_errors = []
     errors = []
     installed_matches = None
+
+    for relative_path in PUBLIC_PACKAGE_ARTIFACTS:
+        source_path = ROOT / relative_path
+        try:
+            source_stat, source_sha256 = regular_file_identity_and_sha256(source_path)
+        except FileNotFoundError:
+            source_missing.append(relative_path)
+            continue
+        except OSError as exc:
+            source_read_errors.append(
+                {"path": relative_path, "error": type(exc).__name__}
+            )
+            continue
+        manifest.append({"path": relative_path, "sha256": source_sha256})
+
+        if installed_root is None:
+            continue
+
+        installed_path = installed_root / relative_path
+        try:
+            installed_stat, installed_sha256 = regular_file_identity_and_sha256(
+                installed_path
+            )
+        except FileNotFoundError:
+            missing.append(relative_path)
+            continue
+        except OSError as exc:
+            installed_read_errors.append(
+                {"path": relative_path, "error": type(exc).__name__}
+            )
+            continue
+
+        if (installed_stat.st_dev, installed_stat.st_ino) == (
+            source_stat.st_dev,
+            source_stat.st_ino,
+        ):
+            source_aliases.append(relative_path)
+        if installed_sha256 != source_sha256:
+            mismatched.append(relative_path)
+
     if installed_root is not None:
-        for artifact in manifest:
-            installed_path = installed_root / artifact["path"]
-            if not installed_path.is_file():
-                missing.append(artifact["path"])
-            elif sha256_bytes(installed_path.read_bytes()) != artifact["sha256"]:
-                mismatched.append(artifact["path"])
-        installed_matches = not missing and not mismatched
+        installed_matches = not any(
+            (
+                source_missing,
+                source_read_errors,
+                missing,
+                mismatched,
+                installed_read_errors,
+            )
+        )
+
+    if source_read_errors:
+        errors.append("source_artifact_read_error")
+    if installed_read_errors:
+        errors.append("installed_artifact_read_error")
 
     if strict and not installed_root_supplied:
         errors.append("installed_root_required")
     elif strict and installed_root.resolve() == ROOT.resolve():
         errors.append("installed_root_is_canonical_source")
+    elif strict and source_aliases:
+        errors.append("installed_artifacts_are_canonical_source_aliases")
 
-    ok = not source_missing and not missing and not mismatched and not errors
+    ok = not any(
+        (
+            source_missing,
+            source_read_errors,
+            missing,
+            mismatched,
+            installed_read_errors,
+            errors,
+        )
+    )
     if not strict and installed_root is None:
-        ok = not source_missing
+        ok = not source_missing and not source_read_errors
     return {
         "ok": ok,
         "strict": strict,
@@ -644,8 +731,11 @@ def integrity_report(installed_root, strict):
         "installed_matches": installed_matches,
         "manifest": manifest,
         "source_missing": source_missing,
+        "source_read_errors": source_read_errors,
         "missing": missing,
         "mismatched": mismatched,
+        "source_aliases": source_aliases,
+        "installed_read_errors": installed_read_errors,
         "errors": errors,
     }
 

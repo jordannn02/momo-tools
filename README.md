@@ -49,6 +49,7 @@ MOMO_TOOLS_HOME=/tmp/momo-tools-public-install-test scripts/install-local.sh
 plugin/scripts/momo-tools integrity --installed-root /tmp/momo-tools-public-install-test --strict
 plugin/scripts/momo-tools recovery-drill --strict
 plugin/scripts/momo-tools slo --as-of 2026-07-10T12:00:00+00:00 --installed-root /tmp/momo-tools-public-install-test --strict
+scripts/build-release-snapshot.sh --ref HEAD --output-dir dist/release
 ```
 
 Or install a local copy:
@@ -129,7 +130,7 @@ See [docs/schemas.md](docs/schemas.md) for the JSON schema and YAML boundary.
 | `evidence` | Validates synthetic JSONL verification evidence. |
 | `freshness` | Assesses whether `verified-working` evidence is current at `--as-of`; strict mode rejects expired or invalid records. |
 | `pressure` | Runs conflict prompts such as no-save plus remember-this. |
-| `integrity [--installed-root PATH] [--strict]` | Hashes a fixed small set of public package files and optionally compares an installed public copy; strict mode requires an explicit installed root that is not the canonical source tree. |
+| `integrity [--installed-root PATH] [--strict]` | Hashes a fixed public manifest and optionally compares an installed copy; strict mode requires an independent installed root, rejects aliases and non-regular artifacts, and reports read failures as JSON. |
 | `recovery-drill [--strict]` | Corrupts and restores a copy in a temporary workspace, then proves the canonical source bytes are unchanged. |
 | `slo [--as-of timestamp] [--evidence path] [--installed-root path] [--strict]` | Aggregates public validation, routing, freshness, integrity, and recovery checks into release health. |
 | `test` | Runs validation, audit, benchmark, and pressure checks together. |
@@ -161,9 +162,19 @@ If you fork this project, keep your private capability index out of the public r
 
 ## Trust Lifecycle Boundary
 
-The P2 commands operate only on the public package and, when supplied, one explicit installed-copy path. Run strict `integrity`, strict `slo`, and `recovery-drill` from a source checkout; the installed binary is smoke-tested with `test`. Strict comparison requires an independent installed copy and rejects the canonical source plugin or repository tree with `installed_root_is_canonical_source`, including when an installed binary is asked to compare its own root. `integrity` compares hashes; it does not monitor or protect any real installation. `recovery-drill` creates, corrupts, and restores only a temporary copy. `slo` is a local aggregation of public checks and makes no network, browser, or connector calls.
+The P2 commands operate only on the public package and, when supplied, one explicit installed-copy path. Run strict `integrity`, strict `slo`, and `recovery-drill` from a source checkout; the installed binary is smoke-tested with `test`. Strict comparison requires an independent installed copy and rejects the canonical source plugin or repository tree with `installed_root_is_canonical_source`, including when an installed binary is asked to compare its own root. It also rejects any manifest artifact that aliases its source counterpart through a symlink or hardlink, reports those paths in `source_aliases`, and opens artifacts non-blockingly before requiring a regular file. Source or installed read/type failures are returned without a traceback. `integrity` compares hashes; it does not monitor or protect any real installation. `recovery-drill` creates, corrupts, and restores only a temporary copy. `slo` is a local aggregation of public checks and makes no network, browser, or connector calls.
 
 See [docs/trust-lifecycle.md](docs/trust-lifecycle.md) for the manifest, strict-mode behavior, and limitations.
+
+## Reproducible Release Snapshot
+
+`VERSION` is the public release source of truth. The plugin manifest and JSON/YAML sample metadata must match it.
+
+```bash
+scripts/build-release-snapshot.sh --ref HEAD --output-dir dist/release
+```
+
+The builder reads only the named committed Git object and uses `git archive` plus timestamp-free gzip output. It emits a `.tar.gz`, a SHA-256 file, and a JSON snapshot manifest containing the exact commit. GitHub CI builds the same ref twice, byte-compares all three outputs, and uploads the verified snapshot as a workflow artifact. A published GitHub release is considered immutable only after repository release immutability is enabled and `gh release verify` plus `gh release verify-asset` succeed.
 
 ## Project Shape
 
@@ -200,6 +211,9 @@ tests/fixtures/
   routing-benchmark.json
 evidence/
   example-verification.jsonl
+scripts/
+  build-release-snapshot.sh
+VERSION
 ```
 
 ## Second Brain Loop
