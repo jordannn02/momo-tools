@@ -12,7 +12,7 @@
     - read-only
   source: public example
   owner: local user
-  version: 0.1.0-public
+  version: 0.2.0-public
   last_verified: 2026-07-08
   verification_level: verified-working
   known_caveats:
@@ -74,4 +74,3 @@
     - current information
     - official source lookup
   workflow_shape: search -> open primary sources -> cite
-

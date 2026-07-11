@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
+import os
 import re
+import stat
 import sys
+import tempfile
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +17,13 @@ DEFAULT_CASES = ROOT.parent / "tests" / "fixtures" / "route-cases.json"
 DEFAULT_BENCHMARK = ROOT.parent / "tests" / "fixtures" / "routing-benchmark.json"
 DEFAULT_EVIDENCE = ROOT.parent / "evidence" / "example-verification.jsonl"
 YAML_EXTENSIONS = {".yaml", ".yml"}
+PUBLIC_PACKAGE_ARTIFACTS = (
+    ".codex-plugin/plugin.json",
+    "capabilities.example.json",
+    "capabilities.example.yaml",
+    "scripts/momo-tools",
+    "skills/momo-tools/SKILL.md",
+)
 
 REQUIRED_FIELDS = {
     "name",
@@ -40,6 +52,7 @@ EVIDENCE_REQUIRED_FIELDS = {
     "evidence_ref",
     "risk_boundary",
 }
+VERIFIED_WORKING_FRESHNESS_FIELDS = {"checked_at", "valid_until"}
 
 RISK_HINTS = {
     "write": [
@@ -479,22 +492,361 @@ def load_evidence(path: Path):
     return records, errors
 
 
-def cmd_evidence(args):
+def parse_aware_timestamp(value, label):
+    if not isinstance(value, str):
+        return None, f"{label} must be an ISO 8601 timestamp with timezone"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None, f"{label} is not a valid ISO 8601 timestamp"
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None, f"{label} must include a timezone offset"
+    return parsed, None
+
+
+def evidence_as_of(value):
+    if value is None:
+        return datetime.now(timezone.utc)
+    parsed, error = parse_aware_timestamp(value, "--as-of")
+    if error:
+        raise SystemExit(error)
+    return parsed
+
+
+def assess_evidence(records, as_of):
+    assessed = []
+    for record in records:
+        raw_level = record.get("level", "missing")
+        result = {
+            "capability": record.get("capability", "missing"),
+            "raw_level": raw_level,
+            "effective_level": raw_level,
+            "freshness": "not-applicable",
+            "errors": [],
+        }
+        if raw_level != "verified-working":
+            assessed.append(result)
+            continue
+
+        missing = sorted(VERIFIED_WORKING_FRESHNESS_FIELDS - set(record))
+        if missing:
+            result["errors"].append(f"missing fields {', '.join(missing)}")
+        checked_at, checked_error = parse_aware_timestamp(record.get("checked_at"), "checked_at")
+        valid_until, valid_error = parse_aware_timestamp(record.get("valid_until"), "valid_until")
+        for error in (checked_error, valid_error):
+            if error:
+                result["errors"].append(error)
+
+        if result["errors"]:
+            result["freshness"] = "invalid"
+        elif valid_until <= checked_at:
+            result["freshness"] = "invalid"
+            result["errors"].append("valid_until must be later than checked_at")
+        elif checked_at > as_of:
+            result["freshness"] = "invalid"
+            result["errors"].append("checked_at must not be later than as_of")
+        elif valid_until <= as_of:
+            result["freshness"] = "expired"
+        else:
+            result["freshness"] = "fresh"
+
+        if result["freshness"] != "fresh":
+            result["effective_level"] = "degraded"
+        assessed.append(result)
+    return assessed
+
+
+def evidence_report(args):
     records, errors = load_evidence(args.evidence)
+    as_of = evidence_as_of(args.as_of)
+    assessed = assess_evidence(records, as_of)
+    freshness_issues = [record for record in assessed if record["freshness"] in {"expired", "invalid"}]
     levels = Counter(record.get("level", "missing") for record in records)
     statuses = Counter(record.get("status", "missing") for record in records)
     capabilities = Counter(record.get("capability", "missing") for record in records)
-    print_json(
-        {
-            "ok": not errors,
-            "record_count": len(records),
-            "levels": dict(sorted(levels.items())),
-            "statuses": dict(sorted(statuses.items())),
-            "capabilities": dict(sorted(capabilities.items())),
-            "errors": errors,
-        }
+    effective_levels = Counter(record["effective_level"] for record in assessed)
+    freshness = Counter(record["freshness"] for record in assessed)
+    ok = not errors and (not args.strict or not freshness_issues)
+    return {
+        "ok": ok,
+        "strict": args.strict,
+        "as_of": as_of.isoformat(),
+        "record_count": len(records),
+        "levels": dict(sorted(levels.items())),
+        "effective_levels": dict(sorted(effective_levels.items())),
+        "freshness": dict(sorted(freshness.items())),
+        "statuses": dict(sorted(statuses.items())),
+        "capabilities": dict(sorted(capabilities.items())),
+        "records": assessed,
+        "errors": errors,
+    }
+
+
+def cmd_evidence(args):
+    report = evidence_report(args)
+    print_json(report)
+    return 0 if report["ok"] else 1
+
+
+def cmd_freshness(args):
+    report = evidence_report(args)
+    print_json(report)
+    return 0 if report["ok"] else 1
+
+
+def sha256_bytes(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_stream(stream):
+    digest = hashlib.sha256()
+    while True:
+        chunk = stream.read(1024 * 1024)
+        if not chunk:
+            return digest.hexdigest()
+        digest.update(chunk)
+
+
+class NonRegularFile(OSError):
+    pass
+
+
+def regular_file_identity_and_sha256(path):
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0)
+    descriptor = None
+    try:
+        descriptor = os.open(path, flags)
+        artifact_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(artifact_stat.st_mode):
+            raise NonRegularFile(f"not a regular file: {path}")
+        stream = os.fdopen(descriptor, "rb", closefd=True)
+        descriptor = None
+        with stream:
+            artifact_sha256 = sha256_stream(stream)
+        return artifact_stat, artifact_sha256
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def installed_package_root(installed_root):
+    if installed_root is None:
+        return None
+    plugin_root = installed_root / "plugin"
+    return plugin_root if plugin_root.exists() else installed_root
+
+
+def integrity_report(installed_root, strict):
+    installed_root_supplied = installed_root is not None
+    installed_root = installed_package_root(installed_root)
+    manifest = []
+    source_missing = []
+    source_read_errors = []
+    missing = []
+    mismatched = []
+    source_aliases = []
+    installed_read_errors = []
+    errors = []
+    installed_matches = None
+
+    for relative_path in PUBLIC_PACKAGE_ARTIFACTS:
+        source_path = ROOT / relative_path
+        try:
+            source_stat, source_sha256 = regular_file_identity_and_sha256(source_path)
+        except FileNotFoundError:
+            source_missing.append(relative_path)
+            continue
+        except OSError as exc:
+            source_read_errors.append(
+                {"path": relative_path, "error": type(exc).__name__}
+            )
+            continue
+        manifest.append({"path": relative_path, "sha256": source_sha256})
+
+        if installed_root is None:
+            continue
+
+        installed_path = installed_root / relative_path
+        try:
+            installed_stat, installed_sha256 = regular_file_identity_and_sha256(
+                installed_path
+            )
+        except FileNotFoundError:
+            missing.append(relative_path)
+            continue
+        except OSError as exc:
+            installed_read_errors.append(
+                {"path": relative_path, "error": type(exc).__name__}
+            )
+            continue
+
+        if (installed_stat.st_dev, installed_stat.st_ino) == (
+            source_stat.st_dev,
+            source_stat.st_ino,
+        ):
+            source_aliases.append(relative_path)
+        if installed_sha256 != source_sha256:
+            mismatched.append(relative_path)
+
+    if installed_root is not None:
+        installed_matches = not any(
+            (
+                source_missing,
+                source_read_errors,
+                missing,
+                mismatched,
+                installed_read_errors,
+            )
+        )
+
+    if source_read_errors:
+        errors.append("source_artifact_read_error")
+    if installed_read_errors:
+        errors.append("installed_artifact_read_error")
+
+    if strict and not installed_root_supplied:
+        errors.append("installed_root_required")
+    elif strict and installed_root.resolve() == ROOT.resolve():
+        errors.append("installed_root_is_canonical_source")
+    elif strict and source_aliases:
+        errors.append("installed_artifacts_are_canonical_source_aliases")
+
+    ok = not any(
+        (
+            source_missing,
+            source_read_errors,
+            missing,
+            mismatched,
+            installed_read_errors,
+            errors,
+        )
     )
-    return 0 if not errors else 1
+    if not strict and installed_root is None:
+        ok = not source_missing and not source_read_errors
+    return {
+        "ok": ok,
+        "strict": strict,
+        "public_scope": True,
+        "installed_copy_checked": installed_root is not None,
+        "installed_matches": installed_matches,
+        "manifest": manifest,
+        "source_missing": source_missing,
+        "source_read_errors": source_read_errors,
+        "missing": missing,
+        "mismatched": mismatched,
+        "source_aliases": source_aliases,
+        "installed_read_errors": installed_read_errors,
+        "errors": errors,
+    }
+
+
+def cmd_integrity(args):
+    report = integrity_report(args.installed_root, args.strict)
+    print_json(report)
+    return 0 if report["ok"] else 1
+
+
+def recovery_drill_report(strict):
+    relative_path = "capabilities.example.json"
+    source_path = ROOT / relative_path
+    source_unchanged = False
+    restored = False
+    corruption_observed = False
+    errors = []
+    try:
+        source_bytes = source_path.read_bytes()
+        source_hash_before = sha256_bytes(source_bytes)
+        with tempfile.TemporaryDirectory(prefix="momo-tools-recovery-") as temp_dir:
+            workspace = Path(temp_dir) / "workspace"
+            target = workspace / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source_bytes)
+            target.write_bytes(source_bytes + b"\ncorruption-simulation\n")
+            corruption_observed = target.read_bytes() != source_bytes
+            target.write_bytes(source_bytes)
+            restored = target.read_bytes() == source_bytes
+        source_unchanged = sha256_bytes(source_path.read_bytes()) == source_hash_before
+    except OSError as exc:
+        errors.append(str(exc))
+
+    passed = corruption_observed and restored and source_unchanged and not errors
+    return {
+        "ok": passed,
+        "strict": strict,
+        "public_scope": True,
+        "temporary_only": True,
+        "source_unchanged": source_unchanged,
+        "passed": passed,
+        "errors": errors,
+    }
+
+
+def cmd_recovery_drill(args):
+    report = recovery_drill_report(args.strict)
+    print_json(report)
+    return 0 if report["ok"] else 1
+
+
+def pressure_report(capabilities):
+    cases = [
+        {
+            "id": "no_save_overrides_memory",
+            "prompt": "Summarize the document and remember the conclusions, but do not save or write anything.",
+            "expected": ["document-reader"],
+            "forbidden": ["memory-capture"],
+            "must_gate": ["write"],
+        },
+        {
+            "id": "no_web_blocks_latest",
+            "prompt": "Give me the latest official release notes, but do not browse the web.",
+            "expected": ["browser-research"],
+            "forbidden": [],
+            "must_gate": ["external-network"],
+        },
+        {
+            "id": "private_email_requires_gates",
+            "prompt": "Search my inbox for a client thread and prepare a reply.",
+            "expected": ["email-triage"],
+            "forbidden": [],
+            "must_gate": ["private-data", "external-network", "write"],
+        },
+    ]
+    ok, results = evaluate_cases(capabilities, cases)
+    return {"ok": ok, "case_count": len(cases), "results": results}
+
+
+def cmd_slo(args):
+    capabilities = load_index(args.index)
+    validation = validation_errors(capabilities)
+    audit_ok, audit_results = evaluate_cases(capabilities, load_cases(args.cases))
+    benchmark_ok, benchmark_results = evaluate_cases(capabilities, load_cases(args.benchmark_cases))
+    integrity = integrity_report(args.installed_root, args.strict)
+    checks = {
+        "validate": {"ok": not validation, "errors": validation},
+        "audit": {"ok": audit_ok, "results": audit_results},
+        "benchmark": {"ok": benchmark_ok, "results": benchmark_results},
+        "pressure": pressure_report(capabilities),
+        "freshness": evidence_report(args),
+        "integrity": integrity,
+        "recovery_drill": recovery_drill_report(args.strict),
+    }
+    report = {
+        "ok": all(check["ok"] for check in checks.values()),
+        "strict": args.strict,
+        "as_of": evidence_as_of(args.as_of).isoformat(),
+        "public_scope": True,
+        "network_calls": False,
+        "browser_calls": False,
+        "connector_calls": False,
+        "limitations": {
+            "real_installation_protected": False,
+            "installed_copy_checked": args.installed_root is not None,
+        },
+        "errors": list(integrity["errors"]),
+        "checks": checks,
+    }
+    print_json(report)
+    return 0 if report["ok"] else 1
 
 
 def cmd_test(args):
@@ -507,16 +859,8 @@ def cmd_test(args):
     audit_ok, audit_results = evaluate_cases(capabilities, cases)
     benchmark_cases = load_cases(args.benchmark_cases)
     benchmark_ok, benchmark_results = evaluate_cases(capabilities, benchmark_cases)
-    pressure_cases = [
-        {
-            "id": "no_save_overrides_memory",
-            "prompt": "Summarize the document and remember the conclusions, but do not save or write anything.",
-            "expected": ["document-reader"],
-            "forbidden": ["memory-capture"],
-            "must_gate": ["write"],
-        }
-    ]
-    pressure_ok, pressure_results = evaluate_cases(capabilities, pressure_cases)
+    pressure = pressure_report(capabilities)
+    pressure_ok = pressure["ok"]
     ok = audit_ok and pressure_ok and benchmark_ok
     print_json(
         {
@@ -524,7 +868,7 @@ def cmd_test(args):
             "validate": {"ok": True, "capability_count": len(capabilities)},
             "audit": {"ok": audit_ok, "results": audit_results},
             "benchmark": {"ok": benchmark_ok, "results": benchmark_results},
-            "pressure": {"ok": pressure_ok, "results": pressure_results},
+            "pressure": pressure,
         }
     )
     return 0 if ok else 1
@@ -551,8 +895,30 @@ def build_parser():
 
     evidence_parser = sub.add_parser("evidence")
     evidence_parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    evidence_parser.add_argument("--as-of", default=None, help="Timezone-aware ISO 8601 timestamp")
+    evidence_parser.add_argument("--strict", action="store_true", help="Fail when verified-working evidence is expired or invalid")
+
+    freshness_parser = sub.add_parser("freshness")
+    freshness_parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    freshness_parser.add_argument("--as-of", default=None, help="Timezone-aware ISO 8601 timestamp")
+    freshness_parser.add_argument("--strict", action="store_true", help="Fail when verified-working evidence is expired or invalid")
 
     sub.add_parser("pressure")
+
+    integrity_parser = sub.add_parser("integrity")
+    integrity_parser.add_argument("--installed-root", type=Path, default=None)
+    integrity_parser.add_argument("--strict", action="store_true", help="Require an independent installed copy with matching public artifacts")
+
+    recovery_parser = sub.add_parser("recovery-drill")
+    recovery_parser.add_argument("--strict", action="store_true", help="Require the complete temporary-only recovery proof")
+
+    slo_parser = sub.add_parser("slo")
+    slo_parser.add_argument("--as-of", default=None, help="Timezone-aware ISO 8601 timestamp")
+    slo_parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    slo_parser.add_argument("--installed-root", type=Path, default=None)
+    slo_parser.add_argument("--strict", action="store_true", help="Require all public P1 and P2 checks against an independent installed copy")
+    slo_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
+    slo_parser.add_argument("--benchmark-cases", type=Path, default=DEFAULT_BENCHMARK)
 
     test_parser = sub.add_parser("test")
     test_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
@@ -571,7 +937,11 @@ def main(argv=None):
         "audit": cmd_audit,
         "benchmark": cmd_benchmark,
         "evidence": cmd_evidence,
+        "freshness": cmd_freshness,
         "pressure": cmd_pressure,
+        "integrity": cmd_integrity,
+        "recovery-drill": cmd_recovery_drill,
+        "slo": cmd_slo,
         "test": cmd_test,
     }
     return commands[args.command](args)

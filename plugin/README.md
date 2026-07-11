@@ -17,5 +17,5 @@ plugin/scripts/momo-tools validate
 plugin/scripts/momo-tools benchmark
 plugin/scripts/momo-tools evidence
 plugin/scripts/momo-tools test
+scripts/build-release-snapshot.sh --ref HEAD --output-dir dist/release
 ```
-

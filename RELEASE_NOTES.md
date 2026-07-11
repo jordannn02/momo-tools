@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.2.0-public - 2026-07-11
+
+- add strict public trust-lifecycle checks for evidence freshness, package integrity, recovery drills, and aggregate SLO health;
+- require an independent installed copy and reject both whole-root and per-artifact symlink or hardlink aliases using open-file identity;
+- return machine-readable integrity failures for missing, mismatched, aliased, non-regular, and unreadable artifacts without blocking or leaking tracebacks;
+- make the tracked-file private-context scan self-nonmatching, non-echoing, and fail closed when the scan command errors;
+- add regression coverage for CI scan behavior, canonical-root rejection, per-artifact aliases, corruption, and read failures.
+- add a single release version source, deterministic committed-ref snapshot builder, SHA-256/JSON provenance outputs, and CI reproducibility comparison.
+
 ## v0.1.0-public
 
 First public-ready MoMo_tools package.
